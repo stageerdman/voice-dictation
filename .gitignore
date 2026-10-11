@@ -1,0 +1,19 @@
+# Secrets — never commit
+.env
+
+# OS / editor
+.DS_Store
+
+# Captured audio — dictation audio is transient and deleted after transcription;
+# never commit any that lingers
+*.wav
+*.m4a
+*.caf
+
+# Build / deps — populated once the Phase 0 stack is chosen
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+dist/
+build/

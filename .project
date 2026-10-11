@@ -1,0 +1,47 @@
+---
+name: Voice Dictation
+github: https://github.com/stageerdman/voice-dictation
+visibility: public
+adopted: 2026-10-11
+claude_md_generated: 2026-10-11
+modules: [WORKFLOW, STRUCTURE, CODING, UX]
+secrets: [GROQ_API_KEY, ANTHROPIC_API_KEY]
+---
+
+# Voice Dictation
+
+A **personal, local "Wispr" for Mac** — a single-user dictation app for the
+owner. Hold a global hotkey (e.g. `⌘ + ⌥`), speak, release, and the spoken words
+are transcribed and **inserted at the current cursor position** in whatever app
+is focused, then also saved to the app's **history**. Fast enough to feel
+instant, English-optimized to start.
+
+Each recording is captured to a temporary audio file, transcribed, optionally
+run through an **AI cleanup** pass (punctuation, filler removal, formatting),
+inserted and logged — and the **audio file is deleted once transcription
+succeeds** (only the text is kept). Both the **transcription model** and the
+**AI cleanup model/technique** are **selectable in settings**.
+
+Builds directly on the lessons of the `transcriber` project
+(`~/dev/transcriber`), whose on-device `mlx-whisper` / `parakeet-mlx` stack is
+the biggest proven win so far — this app reuses that approach for the live,
+low-latency dictation path rather than starting from scratch.
+
+## Stack (proposed at INIT — see the INIT update)
+Mac-native app with a global hotkey, system-wide text insertion, on-device
+transcription (`mlx-whisper` / `parakeet-mlx`, Apple Silicon) as the default
+fast path, optional cloud fast path, and a pluggable AI-cleanup step. Final
+stack is a Phase-0 decision in the INIT update.
+
+## Secrets
+- `GROQ_API_KEY` — **optional.** Fast cloud path: Groq `whisper-large-v3-turbo`
+  for near-instant transcription and fast LLM cleanup. The on-device default
+  needs no secret.
+- `ANTHROPIC_API_KEY` — **optional.** Higher-quality AI cleanup via Claude,
+  selectable as a cleanup model in settings.
+
+Both are optional because the default dictation path runs fully on-device.
+
+## Status
+Created under AI Control on 2026-10-11. INIT update open — see
+`updates/2026-10-11 INIT - OPEN/` and `issues.txt`.
