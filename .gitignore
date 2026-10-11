@@ -17,3 +17,7 @@ __pycache__/
 node_modules/
 dist/
 build/
+
+# Swift Package Manager build artifacts
+.build/
+.swiftpm/

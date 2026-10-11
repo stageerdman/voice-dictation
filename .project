@@ -27,11 +27,13 @@ Builds directly on the lessons of the `transcriber` project
 the biggest proven win so far — this app reuses that approach for the live,
 low-latency dictation path rather than starting from scratch.
 
-## Stack (proposed at INIT — see the INIT update)
-Mac-native app with a global hotkey, system-wide text insertion, on-device
-transcription (`mlx-whisper` / `parakeet-mlx`, Apple Silicon) as the default
-fast path, optional cloud fast path, and a pluggable AI-cleanup step. Final
-stack is a Phase-0 decision in the INIT update.
+## Stack (decided at INIT Phase 0 — see the INIT update)
+**Native Swift** AppKit menu-bar app (`.accessory`, no Dock icon) for the shell:
+global hotkey, menu-bar state, system-wide text insertion. Transcription runs in
+a **long-lived Python sidecar** reusing transcriber's on-device MLX path
+(`mlx-whisper` / `parakeet-mlx`, Apple Silicon) — Parakeet TDT v3 as the default
+fast path — since there's no native Swift ASR here. Optional Groq cloud fast
+path and a pluggable AI-cleanup step (none / local / Groq / Claude) layer on top.
 
 ## Secrets
 - `GROQ_API_KEY` — **optional.** Fast cloud path: Groq `whisper-large-v3-turbo`

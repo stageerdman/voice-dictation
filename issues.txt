@@ -2,11 +2,9 @@ Voice Dictation — known issues and TODOs
 Running list. Resolved items move to the relevant update's wiki.md.
 
 == OPEN DECISIONS (settle at INIT Phase 0) ==
-- [ ] App stack / shell: native Swift (SwiftUI menu-bar app) vs Python + native
-      UI (mirror transcriber) vs Electron/Tauri. Must support a reliable global
-      hotkey, menu-bar presence, and system-wide text insertion. Leaning native
-      Swift menu-bar for lowest latency and cleanest macOS hotkey + Accessibility
-      insertion; to be decided with the stack spike.
+- [x] App stack / shell: DECIDED (Phase 0) — native Swift AppKit menu-bar shell
+      driving a long-lived Python transcription sidecar. Shell spike proves
+      menu-bar + global ⌘+⌥ hotkey + mic capture. See the INIT wiki.md.
 - [ ] Default transcription backend: on-device mlx-whisper / parakeet-mlx
       (reuse transcriber) for the always-available fast path, with Groq
       whisper-large-v3-turbo as an optional cloud fast path. Confirm on-device

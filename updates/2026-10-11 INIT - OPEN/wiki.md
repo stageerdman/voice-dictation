@@ -48,12 +48,62 @@ what we've decided and learned, and why.
   (insertion), and **Input Monitoring** (global hotkey). Onboarding for these is
   a Phase 6 polish item but should be anticipated earlier.
 
-## Stack: leaning native, not yet decided
-- Candidates: **native Swift** (SwiftUI menu-bar app), **Python + native UI**
-  (mirror transcriber), **Tauri/Electron**. Leaning native Swift menu-bar for
-  the tightest global-hotkey + Accessibility-insertion integration and lowest
-  latency. **Not final** — settled by the Phase 0 shell spike and recorded here
-  and in `.project` once proven.
+## Stack: DECIDED — native Swift shell + Python transcription sidecar (Phase 0)
+- **App shell: native Swift** (AppKit menu-bar app, `LSUIElement`/`.accessory`
+  so no Dock icon). Chosen for the tightest global-hotkey + Accessibility-
+  insertion integration and lowest latency. Toolchain on this machine: Swift
+  6.4 / Xcode 27, Apple Silicon.
+- **Transcription stays in Python.** transcriber's on-device path is MLX-only
+  (`mlx-whisper` / `parakeet-mlx`) with no Swift/CoreML wrapper — so the Swift
+  app will drive a **warm, long-lived Python sidecar process** (the pattern of
+  transcriber's `app/engine.py`: one persistent process, pipe a request in, get
+  segments back) rather than reimplementing ASR. This keeps the app native and
+  fast while reusing the crown-jewel decode layer verbatim.
+
+### Phase 0 shell spike — result
+- `spike-shell/` (SwiftPM executable, `swift build && swift run ShellSpike`)
+  proves the three shell primitives in isolation:
+  1. **Menu-bar presence** via `NSStatusItem` with `setActivationPolicy(.accessory)`.
+  2. **Global hold-to-talk hotkey** via `NSEvent.addGlobalMonitorForEvents`
+     (`.flagsChanged`): hold ⌘+⌥ → start, release → stop. Fires system-wide
+     while other apps are focused. Needs **Input Monitoring** permission.
+  3. **Mic capture** via `AVAudioEngine` input tap → temp `.wav`, logging
+     duration. Needs **Microphone** permission.
+- Builds clean on Swift 6 strict concurrency (delegate is `@MainActor`; the
+  global-monitor closure hops via `MainActor.assumeIsolated`, which is safe
+  because those events are delivered on the main thread).
+- **Verify step is the owner's to run** (menu bar + interactive permission
+  grants can't be done headlessly): `cd` into `spike-shell`, `swift run
+  ShellSpike`, grant Microphone + Input Monitoring, confirm the mic icon flips
+  to filled while ⌘+⌥ is held and a `.wav` with the right duration lands in the
+  temp dir.
+
+## Reusing transcriber's on-device path (Phase 0 deep read)
+- **Backends**, selected by substring on the model id: `parakeet` → `parakeet-mlx`,
+  else `mlx-whisper`. MLX-only, Apple-Silicon-only, no CPU fallback.
+- **Crown jewel to reuse: `src/transcription.py`** — the dispatch/decode layer,
+  especially the tuned `WHISPER_DECODE_OPTS` (`condition_on_previous_text=False`,
+  trimmed temperature ladder, word-timestamp anchoring) — hard-won anti-
+  hallucination settings. Public entry `transcribe_mp3_segments(...)` returns
+  `list[TranscribedSegment(start, end, text)]`. Also reusable: `src/catalog.py`
+  (model list + RTF latency table), `converter.py`/`duration.py` (thin
+  ffmpeg/ffprobe wrappers — optional, Swift can call AVFoundation/ffmpeg itself).
+- **For live dictation, Parakeet TDT v3** (`mlx-community/parakeet-tdt-0.6b-v3`,
+  ~0.05 RTF / ~60× realtime, never hallucinates, auto language-detect) is the
+  obvious default fast path. The Czech-finetuned Whisper default is higher
+  quality but ~0.3 RTF and needs a one-time local model conversion — not
+  relevant to this English-first app.
+- **Cleanest low-latency integration point:** the Whisper VAD path already
+  accepts a **float32 mono 16 kHz numpy array**, so the Swift app can hand raw
+  mic PCM to Python with no MP3 round-trip. (Parakeet currently takes a file
+  path in that code; a small change would let it take an array too.)
+- **Caveat:** that codebase is **batch/file-oriented, not streaming** — every
+  path decodes a finished clip and returns complete segments; there is no
+  partial-hypothesis API. Live dictation feeds it one short clip per utterance
+  and accepts per-utterance latency, kept low by the warm process + Parakeet.
+- `src/polish.py` is a Czech-transcript LLM cleanup pass that shells out to the
+  `claude -p` CLI — **not** reused as-is; our Phase 5 cleanup is its own design
+  (none / local / Groq / Claude, English-first).
 
 ## Open, tracked in issues.txt
 Stack choice, text-insertion mechanism, default transcription backend, and which

@@ -100,7 +100,9 @@ throwaway **research spike** inside this update folder; findings go in `wiki.md`
 - **Verify:** short dictations feel instant from release to inserted text.
 
 ## Status tracking
-- [ ] Phase 0 — review transcriber + choose stack (spike)
+- [~] Phase 0 — review transcriber + choose stack (spike) — stack DECIDED
+      (native Swift shell + Python transcription sidecar); shell spike builds
+      clean; awaiting owner's real-run verify (menu bar + mic + hotkey perms)
 - [ ] Phase 1 — system-wide text insertion (spike)
 - [ ] Phase 2 — core dictation loop
 - [ ] Phase 3 — history
@@ -109,12 +111,26 @@ throwaway **research spike** inside this update folder; findings go in `wiki.md`
 - [ ] Phase 6 — speed & polish
 
 ## Where we are (handoff — 2026-10-11)
-**Project just created under AI Control.** Scaffold is in place (`.project`,
-`CLAUDE.md`, `.gitignore`, `.env`, `updates/`, `issues.txt`), the public GitHub
-repo is connected, and this INIT plan is the first commit. No app code yet.
+**Phase 0 nearly done.** Transcriber's on-device path has been read in depth and
+the reusable core is documented in `wiki.md` (crown jewel: `src/transcription.py`
++ its tuned decode opts; Parakeet TDT v3 as the live fast path; warm Python
+sidecar pattern from `app/engine.py`). **Stack decided: native Swift AppKit
+menu-bar shell driving a long-lived Python transcription sidecar.** A throwaway
+`spike-shell/` SwiftPM app proves menu-bar presence + global ⌘+⌥ hold-to-talk
+hotkey + mic-to-temp-wav capture, and **builds clean** on Swift 6.4 / Xcode 27.
+
+The only thing left in Phase 0 is the **owner's real-run verification** of the
+spike — it can't be done headlessly (needs a login session for the menu bar and
+interactive Microphone + Input Monitoring grants).
 
 ## NEXT STEP (resume here)
-Start **Phase 0**: read `~/dev/transcriber` to lift its on-device transcription
-path, then spike the app shell (global hotkey + menu bar + mic capture) to
-settle the stack. Capture the stack decision in `wiki.md`, update `.project`'s
-stack line, and check off Phase 0.
+1. **Verify the shell spike (owner runs it):**
+   `cd "updates/2026-10-11 INIT - OPEN/spike-shell" && swift run ShellSpike`.
+   Grant Microphone + Input Monitoring when prompted. Confirm: a mic icon sits
+   in the menu bar; holding ⌘+⌥ flips it to filled and logs `● recording`;
+   releasing logs `■ stopped — N.NNs`; a `.wav` of the right length is in the
+   temp dir. Report back if the global hotkey doesn't fire while another app is
+   focused (that's the one thing most likely to need an Accessibility grant too).
+2. **Then check off Phase 0** and start **Phase 1 (system-wide text insertion)** —
+   its own spike: insert at the caret across 3+ real apps (Accessibility API vs
+   synthetic keystrokes vs clipboard-paste-and-restore), clipboard left intact.
