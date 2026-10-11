@@ -21,3 +21,6 @@ build/
 # Swift Package Manager build artifacts
 .build/
 .swiftpm/
+
+# Built app bundles (assembled by install.sh; installed to /Applications)
+*.app/

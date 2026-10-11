@@ -104,12 +104,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setIcon(idle: Bool) {
+        guard let button = statusItem.button else { return }
         let name = idle ? "mic" : "mic.fill"
-        statusItem.button?.image = NSImage(systemSymbolName: name, accessibilityDescription: "ShellSpike")
+        if let img = NSImage(systemSymbolName: name, accessibilityDescription: "ShellSpike") {
+            img.isTemplate = true
+            button.image = img
+            button.title = ""
+        } else {
+            // Guaranteed-visible fallback if the SF Symbol can't load.
+            button.image = nil
+            button.title = idle ? "🎙︎" : "🔴"
+        }
     }
 
     nonisolated private func log(_ msg: String) {
-        FileHandle.standardError.write(Data(("[ShellSpike] " + msg + "\n").utf8))
+        let line = "[ShellSpike] " + msg + "\n"
+        FileHandle.standardError.write(Data(line.utf8))
+        // Also append to a fixed logfile so the app can be launched detached
+        // (via `open`) and still have its activity inspected.
+        let path = "/tmp/shellspike.log"
+        if let data = line.data(using: .utf8) {
+            if let fh = FileHandle(forWritingAtPath: path) {
+                fh.seekToEndOfFile()
+                fh.write(data)
+                try? fh.close()
+            } else {
+                try? data.write(to: URL(fileURLWithPath: path))
+            }
+        }
     }
 }
 

@@ -100,9 +100,9 @@ throwaway **research spike** inside this update folder; findings go in `wiki.md`
 - **Verify:** short dictations feel instant from release to inserted text.
 
 ## Status tracking
-- [~] Phase 0 — review transcriber + choose stack (spike) — stack DECIDED
-      (native Swift shell + Python transcription sidecar); shell spike builds
-      clean; awaiting owner's real-run verify (menu bar + mic + hotkey perms)
+- [x] Phase 0 — review transcriber + choose stack (spike) — DONE. Stack: native
+      Swift shell + Python transcription sidecar. Shell spike VERIFIED on the
+      owner's Mac: menu bar + global ⌘+⌥ hold-to-talk + mic→wav all work.
 - [ ] Phase 1 — system-wide text insertion (spike)
 - [ ] Phase 2 — core dictation loop
 - [ ] Phase 3 — history
@@ -111,26 +111,26 @@ throwaway **research spike** inside this update folder; findings go in `wiki.md`
 - [ ] Phase 6 — speed & polish
 
 ## Where we are (handoff — 2026-10-11)
-**Phase 0 nearly done.** Transcriber's on-device path has been read in depth and
-the reusable core is documented in `wiki.md` (crown jewel: `src/transcription.py`
-+ its tuned decode opts; Parakeet TDT v3 as the live fast path; warm Python
-sidecar pattern from `app/engine.py`). **Stack decided: native Swift AppKit
-menu-bar shell driving a long-lived Python transcription sidecar.** A throwaway
-`spike-shell/` SwiftPM app proves menu-bar presence + global ⌘+⌥ hold-to-talk
-hotkey + mic-to-temp-wav capture, and **builds clean** on Swift 6.4 / Xcode 27.
+**Phase 0 DONE.** Transcriber's on-device path read in depth; reusable core
+documented in `wiki.md` (crown jewel `src/transcription.py` + tuned decode opts;
+Parakeet TDT v3 live fast path; warm Python sidecar pattern from `app/engine.py`).
+**Stack: native Swift AppKit menu-bar shell + long-lived Python transcription
+sidecar.** The `spike-shell/` app is **verified on the owner's Mac** — menu-bar
+presence, global ⌘+⌥ hold-to-talk hotkey, and mic→temp-wav capture all work
+(mic permission granted; clean hold cycles logged across apps).
 
-The only thing left in Phase 0 is the **owner's real-run verification** of the
-spike — it can't be done headlessly (needs a login session for the menu bar and
-interactive Microphone + Input Monitoring grants).
+**Dev-app packaging solved.** The app is installed at
+`/Applications/Voice Dictation Dev.app`, signed with a **stable self-signed
+identity** (`create-signing-identity.sh`), so macOS permission grants survive
+rebuilds. Iterate with `spike-shell/install.sh`; grant permissions once. See the
+wiki's "Packaging lesson" — this tooling carries into the real app.
 
 ## NEXT STEP (resume here)
-1. **Verify the shell spike (owner runs it):**
-   `cd "updates/2026-10-11 INIT - OPEN/spike-shell" && swift run ShellSpike`.
-   Grant Microphone + Input Monitoring when prompted. Confirm: a mic icon sits
-   in the menu bar; holding ⌘+⌥ flips it to filled and logs `● recording`;
-   releasing logs `■ stopped — N.NNs`; a `.wav` of the right length is in the
-   temp dir. Report back if the global hotkey doesn't fire while another app is
-   focused (that's the one thing most likely to need an Accessibility grant too).
-2. **Then check off Phase 0** and start **Phase 1 (system-wide text insertion)** —
-   its own spike: insert at the caret across 3+ real apps (Accessibility API vs
-   synthetic keystrokes vs clipboard-paste-and-restore), clipboard left intact.
+Start **Phase 1 — system-wide text insertion** (the riskiest piece; its own
+spike). Prove inserting text **at the current caret** across 3+ real apps
+(browser, Notes, a code editor), comparing: Accessibility API (AXUIElement) vs
+synthetic keystrokes vs clipboard-paste-and-restore. The clipboard must be left
+untouched or faithfully restored, and it needs the macOS **Accessibility**
+permission (the dev app already has an identity it can be granted against).
+Capture the winning mechanism and per-app quirks in `wiki.md`, then wire it
+toward Phase 2's core loop.

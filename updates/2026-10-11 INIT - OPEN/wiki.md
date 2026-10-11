@@ -72,11 +72,37 @@ what we've decided and learned, and why.
 - Builds clean on Swift 6 strict concurrency (delegate is `@MainActor`; the
   global-monitor closure hops via `MainActor.assumeIsolated`, which is safe
   because those events are delivered on the main thread).
-- **Verify step is the owner's to run** (menu bar + interactive permission
-  grants can't be done headlessly): `cd` into `spike-shell`, `swift run
-  ShellSpike`, grant Microphone + Input Monitoring, confirm the mic icon flips
-  to filled while ⌘+⌥ is held and a `.wav` with the right duration lands in the
-  temp dir.
+- **VERIFIED 2026-10-11** on the owner's Mac (Swift 6.4 / Xcode 27): all three
+  primitives work end-to-end. Log showed `microphone permission: GRANTED` and
+  multiple clean hold-to-talk cycles (0.87s / 0.99s / 0.84s / 2.18s), firing
+  while other apps were focused; `.wav` sizes tracked duration (2.18s → 374 KB).
+  Hotkey + mic confirmed; menu-bar icon present.
+
+### Packaging lesson (important for the real app)
+A menu-bar app that needs a **global hotkey + mic** must be a proper **`.app`
+bundle**, not a loose `swift run` binary:
+- A bare terminal binary gets flaky GUI treatment (invisible status item) and
+  macOS won't attach TCC permissions to it reliably.
+- **Accessibility grants are keyed to code-signing identity.** Ad-hoc signing
+  changes the hash every build → the grant resets every rebuild (the "every
+  time" pain). Fix: a **stable self-signed code-signing identity** — created
+  once, reused forever, so grants persist across rebuilds.
+- Tooling now in `spike-shell/` (reused by the real app later):
+  - `create-signing-identity.sh` — one-time; makes the `Voice Dictation Dev`
+    self-signed identity in the login keychain. Gotcha: OpenSSL 3 PKCS12 needs
+    `-legacy` + a non-empty password or Apple's `security` import fails MAC
+    verification. The identity shows as `CSSMERR_TP_NOT_TRUSTED` in
+    `find-identity -v` (trust policy only) but **codesign uses it fine**.
+  - `install.sh` — builds release, assembles the bundle, signs with that
+    identity, installs to **`/Applications/Voice Dictation Dev.app`**. Iterate
+    with just `./install.sh`; grant permissions once.
+  - `Info.plist` — `LSUIElement` (menu-bar only, no Dock icon),
+    `NSMicrophoneUsageDescription`, bundle id `com.voicedictation.dev`.
+- The app logs to **`/tmp/shellspike.log`** as well as stderr, so a detached
+  (`open`-launched) instance can still be inspected.
+- The dev install location (`/Applications/Voice Dictation Dev.app`) and the
+  self-signed identity live on the owner's machine, not in the repo — recreate
+  with the two scripts above.
 
 ## Reusing transcriber's on-device path (Phase 0 deep read)
 - **Backends**, selected by substring on the model id: `parakeet` → `parakeet-mlx`,
