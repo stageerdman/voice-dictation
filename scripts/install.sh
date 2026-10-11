@@ -11,7 +11,6 @@ cd "$(dirname "$0")/.."
 
 APP_NAME="Voice Dictation Dev"
 DEST="/Applications/$APP_NAME.app"
-IDENTITY="Voice Dictation Dev"
 EXECUTABLE="VoiceDictation"
 
 echo "Building release…"
@@ -29,13 +28,18 @@ cp Info.plist "$DEST/Contents/Info.plist"
 # Embed the transcription sidecar so a shipped build is self-contained.
 cp -R sidecar "$DEST/Contents/Resources/sidecar"
 
-if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
+# Ad-hoc sign by default: no keychain, no prompt, instant. The only cost is
+# re-granting Microphone/Accessibility after a rebuild — a fair trade for zero
+# friction. Set VOICE_DICTATION_SIGN_IDENTITY to a keychain identity if you'd
+# rather keep grants across rebuilds (needs that identity authorized for
+# codesign, e.g. via `security set-key-partition-list`).
+IDENTITY="${VOICE_DICTATION_SIGN_IDENTITY:-}"
+if [ -n "$IDENTITY" ] && security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
     codesign --force --sign "$IDENTITY" "$DEST"
-    echo "Signed with stable identity '$IDENTITY' — grants persist across rebuilds."
+    echo "Signed with identity '$IDENTITY' — grants persist across rebuilds."
 else
     codesign --force --sign - "$DEST"
-    echo "WARNING: identity '$IDENTITY' not found; signed ad-hoc (grants reset on"
-    echo "         each rebuild). Run ./scripts/create-signing-identity.sh first."
+    echo "Ad-hoc signed (no keychain prompt)."
 fi
 
 echo "Installed → $DEST"
