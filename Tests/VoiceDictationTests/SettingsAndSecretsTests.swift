@@ -18,13 +18,13 @@ final class SettingsTests: XCTestCase {
         let defaults = freshDefaults()
         let s = AppSettings(defaults: defaults)
         s.transcriptionModel = .whisperTurbo
-        s.cleanupMode = .claude
+        s.cleanupMode = .localLLM
         s.language = "de"
 
         // A new instance over the same defaults must read the saved values.
         let reloaded = AppSettings(defaults: defaults)
         XCTAssertEqual(reloaded.transcriptionModel, .whisperTurbo)
-        XCTAssertEqual(reloaded.cleanupMode, .claude)
+        XCTAssertEqual(reloaded.cleanupMode, .localLLM)
         XCTAssertEqual(reloaded.language, "de")
     }
 

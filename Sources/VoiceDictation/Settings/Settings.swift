@@ -41,23 +41,25 @@ enum TranscriptionModel: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-/// How (and whether) to clean up raw transcription before inserting.
+/// How (and whether) to clean up raw transcription before inserting. Both
+/// cleanup backends run with no API key: the local `claude` CLI (authenticated
+/// Claude Code) or an on-device MLX LLM.
 enum CleanupMode: String, CaseIterable, Codable, Identifiable {
-    case none   // raw text, instant — default
-    case groq   // Groq llama, fast cloud
-    case claude // Claude, highest quality
+    case none       // raw text, instant — default
+    case claudeCLI  // headless `claude -p` (fast model), best quality, needs network
+    case localLLM   // on-device MLX LLM, fully offline
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .none:   return "None (raw, instant)"
-        case .groq:   return "Groq (fast)"
-        case .claude: return "Claude (best)"
+        case .none:      return "None (raw, instant)"
+        case .claudeCLI: return "Claude CLI"
+        case .localLLM:  return "Local LLM"
         }
     }
 
-    var needsNetwork: Bool { self != .none }
+    var needsNetwork: Bool { self == .claudeCLI }
 }
 
 /// User settings, persisted to `UserDefaults`. Deliberately small; each piece is

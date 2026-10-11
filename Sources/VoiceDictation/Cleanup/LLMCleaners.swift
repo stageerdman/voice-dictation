@@ -1,78 +1,69 @@
 import Foundation
 
+/// Cleanup via the local `claude` CLI (Claude Code) running headless — no API
+/// key, uses the machine's existing authentication. The full prompt goes on
+/// stdin (no shell, no arg-length limit, no injection from transcript text),
+/// mirroring the `transcriber` project's proven approach. A fast model and no
+/// extended thinking keep it as quick as the CLI allows.
+struct ClaudeCLICleaner: TextCleaner {
+    /// Fast, always-ready model for a mechanical edit task.
+    private let model = "claude-haiku-4-5-20251001"
+    private let timeout: TimeInterval = 60
+
+    private static func binary() -> String? {
+        let fm = FileManager.default
+        for path in ["/opt/homebrew/bin/claude", "/usr/local/bin/claude",
+                     ("~/.claude/local/claude" as NSString).expandingTildeInPath] {
+            if fm.isExecutableFile(atPath: path) { return path }
+        }
+        return nil
+    }
+
+    func clean(_ text: String) async throws -> String {
+        guard let binary = Self.binary() else { throw CleanerError.unavailable("claude CLI not found") }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = ["-p", "--model", model]
+
+        let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
+        process.standardInput = stdin
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        let prompt = "\(CleanupPrompt.system)\n\n\(CleanupPrompt.user(text))"
+        stdin.fileHandleForWriting.write(Data(prompt.utf8))
+        stdin.fileHandleForWriting.closeFile()
+
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw CleanerError.requestFailed("claude CLI exited \(process.terminationStatus)")
+        }
+        return String(data: data, encoding: .utf8) ?? text
+    }
+}
+
+/// Cleanup via an on-device MLX LLM served by the shared sidecar — fully
+/// offline, no network, no key. The model loads once and stays warm.
+struct LocalLLMCleaner: TextCleaner {
+    func clean(_ text: String) async throws -> String {
+        try await MLXSidecar.shared.send([
+            "op": "clean",
+            "text": text,
+        ])
+    }
+}
+
 enum CleanerError: LocalizedError {
-    case noKey(String)
+    case unavailable(String)
     case requestFailed(String)
 
     var errorDescription: String? {
         switch self {
-        case .noKey(let k): return "\(k) not set"
+        case .unavailable(let d): return d
         case .requestFailed(let d): return d
         }
-    }
-}
-
-/// Fast cloud cleanup via Groq's OpenAI-compatible chat completions.
-struct GroqCleaner: TextCleaner {
-    private let endpoint = URL(string: "https://api.groq.com/openai/v1/chat/completions")!
-    private let model = "llama-3.3-70b-versatile"
-
-    func clean(_ text: String) async throws -> String {
-        guard let key = Secrets.shared.groqAPIKey else { throw CleanerError.noKey("GROQ_API_KEY") }
-
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": model,
-            "temperature": 0,
-            "messages": [
-                ["role": "system", "content": CleanupPrompt.system],
-                ["role": "user", "content": CleanupPrompt.user(text)],
-            ],
-        ])
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw CleanerError.requestFailed(String(data: data, encoding: .utf8) ?? "Groq cleanup failed")
-        }
-        struct Resp: Decodable { struct Choice: Decodable { struct Msg: Decodable { let content: String }; let message: Msg }; let choices: [Choice] }
-        let decoded = try JSONDecoder().decode(Resp.self, from: data)
-        return decoded.choices.first?.message.content ?? text
-    }
-}
-
-/// Highest-quality cleanup via the Claude Messages API (Haiku for speed).
-struct ClaudeCleaner: TextCleaner {
-    private let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
-    private let model = "claude-haiku-4-5-20251001"
-
-    func clean(_ text: String) async throws -> String {
-        guard let key = Secrets.shared.anthropicAPIKey else { throw CleanerError.noKey("ANTHROPIC_API_KEY") }
-
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue(key, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": model,
-            "max_tokens": 2048,
-            "temperature": 0,
-            "system": CleanupPrompt.system,
-            "messages": [
-                ["role": "user", "content": CleanupPrompt.user(text)],
-            ],
-        ])
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw CleanerError.requestFailed(String(data: data, encoding: .utf8) ?? "Claude cleanup failed")
-        }
-        struct Resp: Decodable { struct Block: Decodable { let type: String; let text: String? }; let content: [Block] }
-        let decoded = try JSONDecoder().decode(Resp.self, from: data)
-        let joined = decoded.content.compactMap { $0.text }.joined()
-        return joined.isEmpty ? text : joined
     }
 }

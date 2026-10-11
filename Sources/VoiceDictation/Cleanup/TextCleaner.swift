@@ -14,9 +14,9 @@ struct CleanupService: Sendable {
         guard mode != .none else { return text }
         let cleaner: TextCleaner
         switch mode {
-        case .none:   return text
-        case .groq:   cleaner = GroqCleaner()
-        case .claude: cleaner = ClaudeCleaner()
+        case .none:      return text
+        case .claudeCLI: cleaner = ClaudeCLICleaner()
+        case .localLLM:  cleaner = LocalLLMCleaner()
         }
         do {
             let cleaned = try await cleaner.clean(text)

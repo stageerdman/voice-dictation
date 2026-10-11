@@ -117,7 +117,11 @@ private struct GeneralSettings: View {
     }
 
     private func shortName(_ mode: CleanupMode) -> String {
-        switch mode { case .none: return "Off"; case .groq: return "Groq"; case .claude: return "Claude" }
+        switch mode {
+        case .none: return "Off"
+        case .claudeCLI: return "Claude CLI"
+        case .localLLM: return "Local LLM"
+        }
     }
 
     private func modelSubtitle(_ model: TranscriptionModel) -> String {
@@ -134,9 +138,9 @@ private struct GeneralSettings: View {
 
     private func cleanupSubtitle(_ mode: CleanupMode) -> String {
         switch mode {
-        case .none:   return "Raw transcription, inserted instantly."
-        case .groq:   return "Fast cloud cleanup. Requires Groq API key."
-        case .claude: return "Highest quality. Requires Anthropic API key."
+        case .none:      return "Raw transcription, inserted instantly."
+        case .claudeCLI: return "Best quality via the local Claude CLI. No key; needs network. A few seconds."
+        case .localLLM:  return "On-device MLX model. Fully private, no network. A few seconds."
         }
     }
 }
