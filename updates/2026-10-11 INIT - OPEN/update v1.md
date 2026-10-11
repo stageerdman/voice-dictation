@@ -103,34 +103,57 @@ throwaway **research spike** inside this update folder; findings go in `wiki.md`
 - [x] Phase 0 — review transcriber + choose stack (spike) — DONE. Stack: native
       Swift shell + Python transcription sidecar. Shell spike VERIFIED on the
       owner's Mac: menu bar + global ⌘+⌥ hold-to-talk + mic→wav all work.
-- [ ] Phase 1 — system-wide text insertion (spike)
-- [ ] Phase 2 — core dictation loop
-- [ ] Phase 3 — history
-- [ ] Phase 4 — settings / selectable models
-- [ ] Phase 5 — AI cleanup
-- [ ] Phase 6 — speed & polish
+- [x] Phase 1 — system-wide text insertion — DONE. `TextInserter`:
+      clipboard-paste-and-restore at the caret (needs Accessibility).
+- [x] Phase 2 — core dictation loop — DONE & VERIFIED by the owner in a real app
+      ("works very well"): hold ⌘⌥ → record → Parakeet transcribe → insert →
+      delete audio, with menu-bar state + bottom-center waveform HUD.
+- [x] Phase 3 — history — DONE. `HistoryStore` (JSON, text-only) + day-grouped,
+      searchable History window with copy/re-insert. Unit-tested.
+- [x] Phase 4 — settings / selectable models — DONE. Two-tab Settings; model
+      picker (on-device variants + optional Groq), language. Unit-tested.
+- [x] Phase 5 — AI cleanup — DONE (key-free). none / Claude CLI (`claude -p`
+      headless, Haiku) / local MLX LLM (gemma via sidecar). Both verified on
+      sample text. NOT YET tested on the owner's real speech.
+- [~] Phase 6 — speed & polish — IN PROGRESS. Tests green; real dictation works.
+      Remaining: test cleanup on real speech; latency pass (cleanup is a few
+      seconds — consider insert-raw-then-refine); permission onboarding; a
+      smaller/faster local cleanup model; in-app model-download UX.
 
 ## Where we are (handoff — 2026-10-11)
-**Phase 0 DONE.** Transcriber's on-device path read in depth; reusable core
-documented in `wiki.md` (crown jewel `src/transcription.py` + tuned decode opts;
-Parakeet TDT v3 live fast path; warm Python sidecar pattern from `app/engine.py`).
-**Stack: native Swift AppKit menu-bar shell + long-lived Python transcription
-sidecar.** The `spike-shell/` app is **verified on the owner's Mac** — menu-bar
-presence, global ⌘+⌥ hold-to-talk hotkey, and mic→temp-wav capture all work
-(mic permission granted; clean hold cycles logged across apps).
+**The whole app is built and the core flow works on the owner's Mac.** Native
+Swift AppKit menu-bar shell + a warm Python MLX sidecar. Real dictation
+(hold ⌘⌥ → speak → text at the cursor) was tried by the owner and "works very
+well." Phases 0–5 are done; Phase 6 (polish) is in progress.
 
-**Dev-app packaging solved.** The app is installed at
-`/Applications/Voice Dictation Dev.app`, signed with a **stable self-signed
-identity** (`create-signing-identity.sh`), so macOS permission grants survive
-rebuilds. Iterate with `spike-shell/install.sh`; grant permissions once. See the
-wiki's "Packaging lesson" — this tooling carries into the real app.
+Modular Swift at the repo root, each piece behind a small interface:
+`Hotkey/`, `Audio/`, `Transcription/` (`MLXSidecar` shared client +
+`SidecarTranscriber` + optional `GroqTranscriber`), `Cleanup/`, `Insertion/`,
+`History/`, `Settings/`, `Pipeline/DictationController`, `App/` (UI). Sidecar at
+`sidecar/transcribe_server.py` serves `transcribe` (Parakeet default) and
+`clean` (MLX LLM) ops. 9 unit tests green; clean build, 0 warnings.
+
+**Cleanup is key-free** (owner's requirement): `claude -p` headless (Haiku) or a
+local MLX LLM (gemma-3-12b, warm in the sidecar). Both verified on sample text,
+NOT yet on the owner's real speech.
+
+**Dev workflow:** `./scripts/install.sh` builds + bundles + embeds the sidecar +
+**ad-hoc signs** to `/Applications/Voice Dictation Dev.app` (no keychain prompt).
+The stable-identity path is still available via `VOICE_DICTATION_SIGN_IDENTITY`
+but ad-hoc is the friction-free default; cost is re-granting Mic/Accessibility
+after a rebuild. See [[dev-app-run-workflow]] and the wiki.
 
 ## NEXT STEP (resume here)
-Start **Phase 1 — system-wide text insertion** (the riskiest piece; its own
-spike). Prove inserting text **at the current caret** across 3+ real apps
-(browser, Notes, a code editor), comparing: Accessibility API (AXUIElement) vs
-synthetic keystrokes vs clipboard-paste-and-restore. The clipboard must be left
-untouched or faithfully restored, and it needs the macOS **Accessibility**
-permission (the dev app already has an identity it can be granted against).
-Capture the winning mechanism and per-app quirks in `wiki.md`, then wire it
-toward Phase 2's core loop.
+**Test cleanup on the owner's real speech.** Record a sample
+(`ffmpeg -f avfoundation -i ":1" -t 20 -ar 16000 -ac 1 /tmp/vd_sample.wav`), then
+run it through Parakeet → both cleanup modes and compare raw vs. cleaned on real
+dictation (not just the synthetic sample used so far).
+
+Then finish Phase 6 polish:
+- **Latency:** cleanup adds a few seconds (CLI ~8s warm / 28s cold; local gemma
+  ~2–5s warm). Consider **insert-raw-immediately then refine in place**, or a
+  smaller/faster local model (a 3B instruct would be ~1s) so cleanup isn't a
+  perceptible wait.
+- Permission onboarding (Mic/Accessibility/Input Monitoring) and first-run model
+  download UX (the UX specs for this are captured — see the UX agent output).
+- Close this INIT update once Phase 6 lands; flip the folder to CLOSED.
