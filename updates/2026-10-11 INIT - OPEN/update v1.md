@@ -170,13 +170,34 @@ Modular Swift at the repo root, each piece behind a small interface:
 local MLX LLM (gemma-3-12b, warm in the sidecar). Both verified on sample text,
 NOT yet on the owner's real speech.
 
-**Dev workflow:** `./scripts/install.sh` builds + bundles + embeds the sidecar +
-**ad-hoc signs** to `/Applications/Voice Dictation Dev.app` (no keychain prompt).
-The stable-identity path is still available via `VOICE_DICTATION_SIGN_IDENTITY`
-but ad-hoc is the friction-free default; cost is re-granting Mic/Accessibility
-after a rebuild. See [[dev-app-run-workflow]] and the wiki.
+**Dev workflow:** `./scripts/install.sh` builds + bundles + embeds the icon +
+sidecar + **ad-hoc signs** to `/Applications/Voice Dictator.app` (no keychain).
+Ad-hoc only now (identity path removed per owner); cost is re-granting
+Mic/Accessibility after a rebuild — `tccutil reset Accessibility
+com.voicedictator.app` then re-grant. See [[dev-app-run-workflow]] and
+[[signing-and-accessibility]]. Icon: re-run `./scripts/make-icon.sh` after edits.
+17 unit tests green; clean release build.
+
+## Handoff addendum (2026-10-12)
+This session added the **activity/error Log** (LogStore + per-stage capture +
+launch permission self-check; History window gained a `History | Log` switcher),
+**diagnosed** the owner's "records but no text" as the ad-hoc Accessibility-grant
+reset (fixed by re-granting), and made the app **official**: renamed to
+**Voice Dictator** (`com.voicedictator.app`, v1.0, new icon), fixed the black
+menu-bar glyph (now template white), dropped the signing-identity machinery.
+All committed & pushed (`2447040`, `a89b417`).
 
 ## NEXT STEP (resume here)
+**First, verify the renamed app on the owner's Mac** (couldn't be auto-verified —
+UI driving needs the pending Accessibility grant):
+1. Grant **Accessibility + Microphone** to *Voice Dictator* (new bundle id →
+   fresh grants). Then hold ⌘⌥, speak → confirm text lands at the cursor.
+2. Eyeball the **menu-bar glyph is white** (not black) and the **Finder/app icon**
+   looks right.
+3. Open the menu → History… → flip the **History | Log** switch; confirm the Log
+   view renders and shows the pipeline events.
+
+Then continue Phase 6:
 **Test cleanup on the owner's real speech.** Record a sample
 (`ffmpeg -f avfoundation -i ":1" -t 20 -ar 16000 -ac 1 /tmp/vd_sample.wav`), then
 run it through Parakeet → both cleanup modes and compare raw vs. cleaned on real

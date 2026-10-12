@@ -23,4 +23,13 @@ Running list. Resolved items move to the relevant update's wiki.md.
       Input Monitoring (for the global hotkey).
 
 == KNOWN ISSUES ==
-(none yet — project just created)
+- Ad-hoc signing resets macOS permission grants on every rebuild (the signature
+  changes, so TCC treats it as a new app). Symptom: "records but no text" or
+  "constantly asks for Accessibility" even when it looks granted (stale entry
+  bound to the old signature). Fix: `tccutil reset Accessibility
+  com.voicedictator.app`, relaunch, re-grant once. Accepted tradeoff — signing
+  identity was intentionally dropped. The Log view + launch self-check now make a
+  missing grant obvious. (Diagnosed/handled 2026-10-12.)
+- Not yet visually verified on 2026-10-12 (UI driving needs the pending
+  Accessibility grant): the white menu-bar glyph, the Finder app icon, and the
+  History|Log switcher rendering. Owner to confirm on resume.
