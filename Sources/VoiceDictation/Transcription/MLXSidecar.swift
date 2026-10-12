@@ -17,8 +17,10 @@ final class MLXSidecar: @unchecked Sendable {
     private var process: Process?
     private var stdinPipe: Pipe?
     private var stdoutBuffer = Data()
+    private var stderrBuffer = Data()
     private var pending: CheckedContinuation<String, Error>?
     private let lock = NSLock()
+    private let log = LogStore.shared
 
     init(pythonURL: URL? = nil, scriptURL: URL? = nil) {
         self.pythonURL = pythonURL ?? MLXSidecar.resolvePython()
@@ -91,13 +93,38 @@ final class MLXSidecar: @unchecked Sendable {
             let data = handle.availableData
             if !data.isEmpty { self?.ingest(data) }
         }
-        stderr.fileHandleForReading.readabilityHandler = { handle in _ = handle.availableData }
+        stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            if !data.isEmpty { self?.ingestStderr(data) }
+        }
 
         do { try proc.run() }
         catch { throw TranscriptionError.sidecarUnavailable(error.localizedDescription) }
 
         process = proc
         stdinPipe = stdin
+        log.info(.sidecar, "Sidecar started", detail: "\(pythonURL.path) \(scriptURL.path)")
+    }
+
+    /// Surface the sidecar's stderr lines in the app log so model loads and
+    /// Python-side failures are visible instead of silently discarded.
+    private func ingestStderr(_ data: Data) {
+        lock.lock()
+        stderrBuffer.append(data)
+        var lines: [String] = []
+        while let nl = stderrBuffer.firstIndex(of: 0x0A) {
+            let lineData = stderrBuffer.subdata(in: stderrBuffer.startIndex..<nl)
+            stderrBuffer.removeSubrange(stderrBuffer.startIndex...nl)
+            if let s = String(data: lineData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty {
+                lines.append(s)
+            }
+        }
+        lock.unlock()
+        for line in lines {
+            let level: LogLevel = line.lowercased().contains("error") ? .warning : .info
+            log.log(level, .sidecar, line)
+        }
     }
 
     private func ingest(_ data: Data) {

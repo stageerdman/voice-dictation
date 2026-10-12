@@ -16,8 +16,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar = MenuBarController(controller: controller)
 
         controller.start()
+        logStartupSelfCheck()
         requestMicrophoneAccess()
         promptAccessibilityIfNeeded()
+    }
+
+    /// Record the permission state at launch. The global hotkey and text
+    /// insertion both need Accessibility, which fails *silently* when missing —
+    /// and an ad-hoc rebuild resets the grant. Logging it here means "records but
+    /// no text" has an explanation in the Log instead of a vanishing icon flash.
+    private func logStartupSelfCheck() {
+        let log = controller.logStore
+        log.info(.system, "Voice Dictation launched")
+
+        let ax = AXIsProcessTrusted()
+        log.log(ax ? .info : .error, .permission,
+                ax ? "Accessibility: granted" : "Accessibility: NOT granted — hotkey and text insertion will silently fail",
+                detail: ax ? nil : "Grant it in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild this grant resets because the code signature changed.")
+
+        let mic = AVCaptureDevice.authorizationStatus(for: .audio)
+        let micOK = mic == .authorized
+        log.log(micOK ? .info : .warning, .permission,
+                "Microphone: \(Self.describe(mic))",
+                detail: micOK ? nil : "Enable it in System Settings → Privacy & Security → Microphone.")
+    }
+
+    private static func describe(_ status: AVAuthorizationStatus) -> String {
+        switch status {
+        case .authorized:    return "granted"
+        case .denied:        return "denied"
+        case .restricted:    return "restricted"
+        case .notDetermined: return "not yet requested"
+        @unknown default:    return "unknown"
+        }
     }
 
     private func requestMicrophoneAccess() {

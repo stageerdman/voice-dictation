@@ -23,6 +23,7 @@ final class DictationController {
     private let inserter: TextInserter
     private let history: HistoryStore
     private let settings: AppSettings
+    private let log: LogStore
 
     /// UI observers.
     var onStateChange: ((DictationState) -> Void)?
@@ -38,7 +39,8 @@ final class DictationController {
          cleanup: CleanupService = CleanupService(),
          inserter: TextInserter = TextInserter(),
          history: HistoryStore = HistoryStore(),
-         settings: AppSettings = .shared) {
+         settings: AppSettings = .shared,
+         log: LogStore = .shared) {
         self.hotkey = hotkey
         self.recorder = recorder
         self.transcriber = transcriber
@@ -46,6 +48,7 @@ final class DictationController {
         self.inserter = inserter
         self.history = history
         self.settings = settings
+        self.log = log
 
         self.recorder.onLevel = { [weak self] level in
             DispatchQueue.main.async { self?.onLevel?(level) }
@@ -55,6 +58,7 @@ final class DictationController {
     }
 
     var historyStore: HistoryStore { history }
+    var logStore: LogStore { log }
 
     func start() {
         hotkey.start()
@@ -71,9 +75,11 @@ final class DictationController {
         }
         do {
             try recorder.start()
+            log.info(.audio, "Recording started")
             state = .recording
         } catch {
-            fail("Couldn't start recording", isPermission: false)
+            fail("Couldn't start recording", category: .audio, isPermission: false,
+                 detail: error.localizedDescription)
         }
     }
 
@@ -101,27 +107,38 @@ final class DictationController {
                          cleanupMode: CleanupMode) async {
         defer { deleteAudio(recording.url) }  // audio is transient — always remove it
 
+        log.info(.audio, "Recording stopped",
+                 detail: String(format: "%.2fs of audio", recording.duration))
+
         let raw: String
         do {
             raw = try await transcriber.transcribe(audioURL: recording.url, model: model, language: language)
+            log.info(.transcription, "Transcribed \(raw.count) character\(raw.count == 1 ? "" : "s")",
+                     detail: "model: \(model.rawValue)")
         } catch TranscriptionError.empty {
-            fail("No speech heard", isPermission: false)
+            fail("No speech heard", category: .transcription, isPermission: false)
             return
         } catch {
-            fail(error.localizedDescription, isPermission: false)
+            fail("Transcription failed", category: .transcription, isPermission: false,
+                 detail: error.localizedDescription)
             return
         }
 
         let text = await cleanup.clean(raw, mode: cleanupMode)
+        if cleanupMode != .none {
+            log.info(.cleanup, "Cleanup applied (\(cleanupMode.rawValue))")
+        }
 
         state = .inserting
         do {
             try inserter.insert(text)
         } catch TextInserter.InsertionError.accessibilityNotGranted {
-            fail("Accessibility access needed", isPermission: true)
+            fail("Accessibility access needed — can't insert text", category: .permission, isPermission: true,
+                 detail: "Grant Accessibility to Voice Dictation in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild this grant resets.")
             return
         } catch {
-            fail("Couldn't insert text", isPermission: false)
+            fail("Couldn't insert text", category: .insertion, isPermission: false,
+                 detail: error.localizedDescription)
             return
         }
 
@@ -131,6 +148,7 @@ final class DictationController {
             duration: recording.duration,
             targetApp: inserter.lastTargetApp
         ))
+        log.info(.insertion, "Inserted into \(inserter.lastTargetApp ?? "frontmost app")")
 
         state = .success
         Task { [weak self] in
@@ -143,7 +161,8 @@ final class DictationController {
         try? FileManager.default.removeItem(at: url)
     }
 
-    private func fail(_ message: String, isPermission: Bool) {
+    private func fail(_ message: String, category: LogCategory, isPermission: Bool, detail: String? = nil) {
+        log.error(category, message, detail: detail)
         state = .error(message: message, isPermission: isPermission)
         let delay: UInt64 = isPermission ? 0 : 1_600_000_000
         guard !isPermission else { return }  // permission errors persist until resolved

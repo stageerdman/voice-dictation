@@ -119,6 +119,25 @@ throwaway **research spike** inside this update folder; findings go in `wiki.md`
       Remaining: test cleanup on real speech; latency pass (cleanup is a few
       seconds — consider insert-raw-then-refine); permission onboarding; a
       smaller/faster local cleanup model; in-app model-download UX.
+  - [x] **Activity/Error Log + permission self-check (2026-10-12).** New
+        `Logging/LogStore` (JSON at `…/VoiceDictation/log.json`, newest-first,
+        capped 500, writes off the hot path). Every pipeline stage and failure
+        now logs with a category; the sidecar's stderr (previously discarded in
+        `MLXSidecar`) is captured; at launch a self-check logs Accessibility &
+        Microphone grant state. The History window gained a toolbar
+        `History | Log` segmented switcher (UX-agent design) with a red dot on
+        `Log` for unseen errors, a level filter (All / Warnings & Errors /
+        Errors), day-grouped rows (level glyph + mono time + category pill +
+        tap-to-expand detail), Copy All / Reveal in Finder / Clear Log…, and
+        per-row Copy Line / Copy Detail. 8 new unit tests (17 total) green.
+  - **Diagnosed the owner's "records but no text" report:** the self-check
+        confirmed **Accessibility NOT granted**. Root cause is the documented
+        ad-hoc-signing grant reset — the last reinstall (Oct 11 21:23) came right
+        after the last working dictation (21:21) and wiped the Accessibility
+        grant, so the global hotkey still fired and the mic still recorded but
+        the ⌘V insertion (gated on `AXIsProcessTrusted()`) silently no-op'd. Fix:
+        re-grant Accessibility (and Mic) to *Voice Dictation Dev.app* and
+        relaunch. The log now makes this self-evident instead of a 1.6s flash.
 
 ## Where we are (handoff — 2026-10-11)
 **The whole app is built and the core flow works on the owner's Mac.** Native

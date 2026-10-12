@@ -1,23 +1,34 @@
 import AppKit
 import SwiftUI
 
+/// Which surface the window is showing. The window hosts both History and the
+/// activity/error Log behind a single segmented switcher.
+enum WindowMode: String, CaseIterable, Identifiable {
+    case history, log
+    var id: String { rawValue }
+    var title: String { self == .history ? "History" : "Log" }
+}
+
 @MainActor
 final class HistoryWindowController: NSWindowController {
-    init(store: HistoryStore) {
+    init(store: HistoryStore, log: LogStore) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered, defer: false
         )
-        window.title = "History"
+        window.title = "Voice Dictation"
         window.setContentSize(NSSize(width: 720, height: 520))
         window.minSize = NSSize(width: 520, height: 400)
         window.center()
         super.init(window: window)
-        window.contentView = NSHostingView(rootView: HistoryView(
-            model: HistoryModel(store: store),
+        let root = HistoryWindowRoot(
+            historyModel: HistoryModel(store: store),
+            logModel: LogModel(store: log),
             onReinsert: { [weak self] text in self?.reinsert(text) }
-        ))
+        )
+        let hosting = NSHostingController(rootView: root)
+        window.contentViewController = hosting
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) unused") }
@@ -29,6 +40,112 @@ final class HistoryWindowController: NSWindowController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             try? TextInserter().insert(text)
         }
+    }
+}
+
+/// Top-level window content: the History ↔ Log switcher plus the shared chrome
+/// (search field, bottom footnote). The segmented switcher lives in the window
+/// toolbar; Log-only actions and the active search prompt follow the mode.
+struct HistoryWindowRoot: View {
+    @ObservedObject var historyModel: HistoryModel
+    @ObservedObject var logModel: LogModel
+    let onReinsert: (String) -> Void
+
+    @State private var mode: WindowMode = .history
+    /// Set once the user has looked at the Log this session, so the unseen-error
+    /// dot stops nagging after they've seen it.
+    @State private var sawLog = false
+    @State private var confirmingClear = false
+
+    private var showErrorDot: Bool { !sawLog && mode != .log && logModel.hasErrors }
+
+    var body: some View {
+        content
+            .frame(minWidth: 520, minHeight: 400)
+            .searchable(text: activeSearch, placement: .toolbar,
+                        prompt: mode == .history ? "Search dictations" : "Search log")
+            .safeAreaInset(edge: .bottom) { privacyFootnote }
+            .toolbar {
+                ToolbarItem(placement: .principal) { switcher }
+                if mode == .log { logToolbar }
+            }
+            .onChange(of: mode) { _, newValue in if newValue == .log { sawLog = true } }
+            .confirmationDialog("Clear the log?", isPresented: $confirmingClear) {
+                Button("Clear Log", role: .destructive) { logModel.clear() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes all logged events. It can't be undone.")
+            }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch mode {
+        case .history: HistoryView(model: historyModel, onReinsert: onReinsert)
+        case .log:     LogView(model: logModel)
+        }
+    }
+
+    private var switcher: some View {
+        Picker("View", selection: $mode) {
+            ForEach(WindowMode.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .fixedSize()
+        .overlay(alignment: .topTrailing) {
+            if showErrorDot {
+                Circle().fill(.red).frame(width: 7, height: 7).offset(x: 3, y: -3)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityValue(showErrorDot ? "unseen errors in Log" : "")
+    }
+
+    @ToolbarContentBuilder private var logToolbar: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Picker("Filter by level", selection: $logModel.filter) {
+                    ForEach(LevelFilter.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: logModel.filter == .all
+                      ? "line.3.horizontal.decrease.circle"
+                      : "line.3.horizontal.decrease.circle.fill")
+            }
+            .help("Filter by level")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button { copyAll() } label: { Label("Copy All", systemImage: "doc.on.doc") }
+                Button { NSWorkspace.shared.activateFileViewerSelecting([logModel.logFileURL]) } label: {
+                    Label("Reveal Log File in Finder", systemImage: "folder")
+                }
+                Divider()
+                Button(role: .destructive) { confirmingClear = true } label: {
+                    Label("Clear Log…", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .help("More")
+        }
+    }
+
+    private var activeSearch: Binding<String> {
+        mode == .history ? $historyModel.search : $logModel.search
+    }
+
+    private func copyAll() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(logModel.copyableText(), forType: .string)
+    }
+
+    private var privacyFootnote: some View {
+        Text("History & log store text only. Audio is deleted the moment it's transcribed — it never leaves your Mac.")
+            .font(.footnote).foregroundStyle(.tertiary)
+            .padding(.horizontal, 20).padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
     }
 }
 
@@ -86,9 +203,6 @@ struct HistoryView: View {
                 list
             }
         }
-        .frame(minWidth: 520, minHeight: 400)
-        .searchable(text: $model.search, placement: .toolbar, prompt: "Search dictations")
-        .safeAreaInset(edge: .bottom) { privacyFootnote }
     }
 
     private var list: some View {
@@ -105,14 +219,6 @@ struct HistoryView: View {
             }
         }
         .listStyle(.inset)
-    }
-
-    private var privacyFootnote: some View {
-        Text("History stores text only. Audio is deleted the moment it's transcribed — it never leaves your Mac.")
-            .font(.footnote).foregroundStyle(.tertiary)
-            .padding(.horizontal, 20).padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.bar)
     }
 
     private func copy(_ text: String) {

@@ -97,7 +97,9 @@ final class MenuBarController {
 
     @objc private func openHistory() {
         NSApp.activate(ignoringOtherApps: true)
-        if historyWindow == nil { historyWindow = HistoryWindowController(store: controller.historyStore) }
+        if historyWindow == nil {
+            historyWindow = HistoryWindowController(store: controller.historyStore, log: controller.logStore)
+        }
         historyWindow?.showWindow(nil)
         historyWindow?.window?.makeKeyAndOrderFront(nil)
     }
