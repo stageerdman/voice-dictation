@@ -130,6 +130,20 @@ throwaway **research spike** inside this update folder; findings go in `wiki.md`
         Errors), day-grouped rows (level glyph + mono time + category pill +
         tap-to-expand detail), Copy All / Reveal in Finder / Clear Log…, and
         per-row Copy Line / Copy Detail. 8 new unit tests (17 total) green.
+  - [x] **Official branding: renamed to "Voice Dictator" + app icon + menu-bar
+        glyph fix (2026-10-12).** Bundle is now `Voice Dictator.app`
+        (`com.voicedictator.app`, v1.0); install.sh removes the old
+        `Voice Dictation Dev.app`. New app icon (`scripts/make-icon.swift` draws
+        the spec → `scripts/make-icon.sh` packs `Resources/AppIcon.icns`): macOS
+        squircle, diagonal indigo gradient (#5B7CFF→#2E2CB8), white 5-bar
+        waveform with a soft shadow — UX-agent design, verified legible down to
+        128px. Menu-bar glyph bug fixed: `withSymbolConfiguration` returned a
+        non-template image so the status icon rendered black; now forced
+        `isTemplate = true` → adaptive white-on-dark like every other menu-bar
+        icon (state tints still apply). Signing simplified to ad-hoc only
+        (removed `create-signing-identity.sh` and the identity branch) per the
+        owner — see [[signing-and-accessibility]]. Renaming to a new bundle id
+        means a one-time Accessibility/Mic re-grant.
   - **Diagnosed the owner's "records but no text" report:** the self-check
         confirmed **Accessibility NOT granted**. Root cause is the documented
         ad-hoc-signing grant reset — the last reinstall (Oct 11 21:23) came right

@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// no text" has an explanation in the Log instead of a vanishing icon flash.
     private func logStartupSelfCheck() {
         let log = controller.logStore
-        log.info(.system, "Voice Dictation launched")
+        log.info(.system, "Voice Dictator launched")
 
         let ax = AXIsProcessTrusted()
         log.log(ax ? .info : .error, .permission,

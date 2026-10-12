@@ -36,14 +36,20 @@ final class MenuBarController {
         guard let button = statusItem.button else { return }
         button.image = Self.symbol("waveform")
         button.image?.isTemplate = true
-        button.setAccessibilityLabel("Voice Dictation, ready")
+        button.setAccessibilityLabel("Voice Dictator, ready")
         button.wantsLayer = true
     }
 
     private static func symbol(_ name: String) -> NSImage? {
-        let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular, scale: .medium)
-        return NSImage(systemSymbolName: name, accessibilityDescription: "Voice Dictation")?
+        let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium, scale: .medium)
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Voice Dictator")?
             .withSymbolConfiguration(cfg)
+        // `withSymbolConfiguration` returns a non-template image; force template so
+        // the menu bar renders it adaptively (white on a dark bar) like every other
+        // status item, instead of as a hard-to-see black glyph. State tints
+        // (red/green/orange) still apply via `contentTintColor`.
+        image?.isTemplate = true
+        return image
     }
 
     // MARK: - Menu
@@ -83,7 +89,7 @@ final class MenuBarController {
         menu.addItem(launch)
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Voice Dictation", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Voice Dictator", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         statusItem.menu = menu
     }
@@ -122,14 +128,14 @@ final class MenuBarController {
         case .idle:
             button.image = Self.symbol("waveform")
             button.contentTintColor = nil
-            button.setAccessibilityLabel("Voice Dictation, ready")
+            button.setAccessibilityLabel("Voice Dictator, ready")
             headerItem.title = "Ready"
             hud.hide()
 
         case .recording:
             button.image = Self.symbol("waveform")
             button.contentTintColor = .systemRed
-            button.setAccessibilityLabel("Voice Dictation, listening")
+            button.setAccessibilityLabel("Voice Dictator, listening")
             headerItem.title = "Listening…"
             if !reduceMotion { pulse(button, from: 1.0, to: 0.45, duration: 1.1) }
             hud.showRecording(reduceMotion: reduceMotion)
@@ -137,7 +143,7 @@ final class MenuBarController {
         case .transcribing:
             button.image = Self.symbol("waveform")
             button.contentTintColor = .secondaryLabelColor
-            button.setAccessibilityLabel("Voice Dictation, transcribing")
+            button.setAccessibilityLabel("Voice Dictator, transcribing")
             headerItem.title = "Transcribing…"
             if !reduceMotion { pulse(button, from: 0.8, to: 0.5, duration: 0.8) }
             hud.showTranscribing()
@@ -149,7 +155,7 @@ final class MenuBarController {
         case .success:
             button.image = Self.symbol("checkmark")
             button.contentTintColor = .systemGreen
-            button.setAccessibilityLabel("Voice Dictation, text inserted")
+            button.setAccessibilityLabel("Voice Dictator, text inserted")
             headerItem.title = "Inserted"
             hud.hide()
             announce("Text inserted")
@@ -157,7 +163,7 @@ final class MenuBarController {
         case .error(let message, let isPermission):
             button.image = Self.symbol("exclamationmark.triangle")
             button.contentTintColor = .systemOrange
-            button.setAccessibilityLabel("Voice Dictation, \(message)")
+            button.setAccessibilityLabel("Voice Dictator, \(message)")
             headerItem.title = message
             hud.hide()
             announce(message)
@@ -192,10 +198,10 @@ final class MenuBarController {
 
         let content = UNMutableNotificationContent()
         if isMic {
-            content.title = "Voice Dictation can't hear you"
+            content.title = "Voice Dictator can't hear you"
             content.body = "Microphone access is off. Turn it on in System Settings → Privacy & Security → Microphone."
         } else {
-            content.title = "Voice Dictation can't type for you"
+            content.title = "Voice Dictator can't type for you"
             content.body = "Grant Accessibility access so dictated text can be inserted. System Settings → Privacy & Security → Accessibility."
         }
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)

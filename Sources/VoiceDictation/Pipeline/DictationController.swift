@@ -134,7 +134,7 @@ final class DictationController {
             try inserter.insert(text)
         } catch TextInserter.InsertionError.accessibilityNotGranted {
             fail("Accessibility access needed — can't insert text", category: .permission, isPermission: true,
-                 detail: "Grant Accessibility to Voice Dictation in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild this grant resets.")
+                 detail: "Grant Accessibility to Voice Dictator in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild this grant resets.")
             return
         } catch {
             fail("Couldn't insert text", category: .insertion, isPermission: false,

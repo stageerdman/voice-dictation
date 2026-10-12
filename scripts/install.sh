@@ -1,15 +1,13 @@
 #!/bin/bash
-# Build Voice Dictation and install it as a signed .app in /Applications, with
-# the Python transcription sidecar embedded in Resources. Signed with the stable
-# "Voice Dictation Dev" identity so macOS permission grants (Microphone,
-# Accessibility) persist across rebuilds. Grant permissions ONCE; then iterate
-# with just `./scripts/install.sh`.
-#
-# One-time prerequisite: ./scripts/create-signing-identity.sh
+# Build "Voice Dictator" and install it as an ad-hoc-signed .app in /Applications,
+# with the app icon and the Python transcription sidecar embedded in Resources.
+# Ad-hoc signing means no keychain/certificate setup; the only cost is re-granting
+# Microphone/Accessibility after a rebuild (the signature changes each build, so
+# macOS resets the grants). Iterate with just `./scripts/install.sh`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_NAME="Voice Dictation Dev"
+APP_NAME="Voice Dictator"
 DEST="/Applications/$APP_NAME.app"
 EXECUTABLE="VoiceDictation"
 
@@ -20,26 +18,27 @@ BIN=".build/release/$EXECUTABLE"
 
 # Quit any running copy so we can replace the bundle.
 pkill -f "$DEST/Contents/MacOS/$EXECUTABLE" 2>/dev/null || true
+# Clean up the earlier dev-named bundle so there aren't two copies in /Applications.
+pkill -f "/Applications/Voice Dictation Dev.app/Contents/MacOS/$EXECUTABLE" 2>/dev/null || true
+rm -rf "/Applications/Voice Dictation Dev.app"
 
 rm -rf "$DEST"
 mkdir -p "$DEST/Contents/MacOS" "$DEST/Contents/Resources"
 cp "$BIN" "$DEST/Contents/MacOS/$EXECUTABLE"
 cp Info.plist "$DEST/Contents/Info.plist"
+# App icon (shown in Finder / Applications). Built by scripts/make-icon.sh.
+if [ -f "Resources/AppIcon.icns" ]; then
+    cp "Resources/AppIcon.icns" "$DEST/Contents/Resources/AppIcon.icns"
+else
+    echo "⚠️  Resources/AppIcon.icns missing — run scripts/make-icon.sh first."
+fi
 # Embed the transcription sidecar so a shipped build is self-contained.
 cp -R sidecar "$DEST/Contents/Resources/sidecar"
 
-# Ad-hoc sign by default: no keychain, no prompt, instant. The only cost is
-# re-granting Microphone/Accessibility after a rebuild — a fair trade for zero
-# friction. Set VOICE_DICTATION_SIGN_IDENTITY to a keychain identity if you'd
-# rather keep grants across rebuilds (needs that identity authorized for
-# codesign, e.g. via `security set-key-partition-list`).
-IDENTITY="${VOICE_DICTATION_SIGN_IDENTITY:-}"
-if [ -n "$IDENTITY" ] && security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
-    codesign --force --sign "$IDENTITY" "$DEST"
-    echo "Signed with identity '$IDENTITY' — grants persist across rebuilds."
-else
-    codesign --force --sign - "$DEST"
-    echo "Ad-hoc signed (no keychain prompt)."
-fi
+# Ad-hoc sign: no keychain, no prompt, instant. TCC attaches permissions to the
+# signature, which changes each build — so grant Microphone/Accessibility once
+# per rebuild (the Log view + launch self-check show when a grant is missing).
+codesign --force --sign - "$DEST"
 
 echo "Installed → $DEST"
+echo "Note: after a rebuild, re-grant Accessibility & Microphone to \"$APP_NAME\" once."

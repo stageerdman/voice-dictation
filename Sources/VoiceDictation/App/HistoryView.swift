@@ -17,7 +17,7 @@ final class HistoryWindowController: NSWindowController {
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered, defer: false
         )
-        window.title = "Voice Dictation"
+        window.title = "Voice Dictator"
         window.setContentSize(NSSize(width: 720, height: 520))
         window.minSize = NSSize(width: 520, height: 400)
         window.center()

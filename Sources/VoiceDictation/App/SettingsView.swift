@@ -11,7 +11,7 @@ final class SettingsWindowController: NSWindowController {
             styleMask: [.titled, .closable],
             backing: .buffered, defer: false
         )
-        window.title = "Voice Dictation Settings"
+        window.title = "Voice Dictator Settings"
         window.center()
         window.contentView = NSHostingView(rootView: SettingsView())
         self.init(window: window)
