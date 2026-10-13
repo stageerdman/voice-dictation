@@ -23,6 +23,14 @@ Running list. Resolved items move to the relevant update's wiki.md.
       Input Monitoring (for the global hotkey).
 
 == KNOWN ISSUES ==
+- RESOLVED 2026-10-13 — "FFmpeg is not installed or not in your PATH" →
+  transcription failed. A GUI app launched from Finder / /Applications inherits
+  LaunchServices' minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin), which omits
+  Homebrew, so parakeet-mlx/mlx-whisper couldn't find ffmpeg. (Worked when
+  launched from a terminal that had Homebrew on PATH, hence the intermittent
+  "broken again".) Fix: MLXSidecar.childEnvironment() now prepends
+  /opt/homebrew/bin, /usr/local/bin, and the venv's bin to the sidecar's PATH,
+  so ffmpeg resolves regardless of launch context. Locked in by MLXSidecarTests.
 - Ad-hoc signing resets macOS permission grants on every rebuild (the signature
   changes, so TCC treats it as a new app). Symptom: "records but no text" or
   "constantly asks for Accessibility" even when it looks granted (stale entry

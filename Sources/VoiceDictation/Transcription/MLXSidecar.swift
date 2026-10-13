@@ -45,6 +45,25 @@ final class MLXSidecar: @unchecked Sendable {
         return URL(fileURLWithPath: ("~/dev/voice-dictation/sidecar/transcribe_server.py" as NSString).expandingTildeInPath)
     }
 
+    /// Environment for the sidecar process. A GUI app launched from Finder /
+    /// `/Applications` inherits LaunchServices' minimal `PATH`
+    /// (`/usr/bin:/bin:/usr/sbin:/sbin`), which omits Homebrew — so
+    /// `parakeet-mlx` / `mlx-whisper` can't find `ffmpeg` and transcription
+    /// fails with "FFmpeg is not installed or not in your PATH". Prepend the
+    /// Homebrew prefixes and the Python venv's own `bin` so the audio decoder is
+    /// always resolvable regardless of how the app was launched.
+    static func childEnvironment(python: URL) -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        var prefixes = ["/opt/homebrew/bin", "/usr/local/bin"]
+        // The venv's bin dir (…/bin/python → …/bin) often holds tools too.
+        prefixes.append(python.deletingLastPathComponent().path)
+        let existing = env["PATH"].map { $0.split(separator: ":").map(String.init) } ?? []
+        var seen = Set<String>()
+        let merged = (prefixes + existing).filter { seen.insert($0).inserted && !$0.isEmpty }
+        env["PATH"] = merged.joined(separator: ":")
+        return env
+    }
+
     // MARK: - Request
 
     /// Sends one request and returns the trimmed `text` from the response.
@@ -83,6 +102,7 @@ final class MLXSidecar: @unchecked Sendable {
         let proc = Process()
         proc.executableURL = pythonURL
         proc.arguments = ["-u", scriptURL.path]
+        proc.environment = MLXSidecar.childEnvironment(python: pythonURL)
 
         let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
         proc.standardInput = stdin
