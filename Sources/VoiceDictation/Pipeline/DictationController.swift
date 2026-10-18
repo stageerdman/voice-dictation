@@ -146,7 +146,7 @@ final class DictationController {
             inserted = true
         } catch TextInserter.InsertionError.accessibilityNotGranted {
             insertionError = ("Accessibility access needed — can't insert text", .permission, true,
-                "Grant Accessibility to Voice Dictator in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild this grant resets. Your words are saved in History — open it to copy or re-insert them.")
+                "Open System Settings → Privacy & Security → Accessibility. If Voice Dictator is already listed there (even enabled), a rebuild invalidated that grant — remove it with the “–” button, then relaunch and allow it again. Your words are saved in History — open it to copy or re-insert them.")
         } catch {
             insertionError = ("Couldn't insert text — saved to History", .insertion, false,
                 error.localizedDescription)

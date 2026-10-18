@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ax = AXIsProcessTrusted()
         log.log(ax ? .info : .error, .permission,
                 ax ? "Accessibility: granted" : "Accessibility: NOT granted — hotkey and text insertion will silently fail",
-                detail: ax ? nil : "Grant it in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild this grant resets because the code signature changed.")
+                detail: ax ? nil : "Grant it in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild the code signature changes, so any existing grant goes stale — if Voice Dictator already appears there, remove it with “–” and re-add it.")
 
         let mic = AVCaptureDevice.authorizationStatus(for: .audio)
         let micOK = mic == .authorized

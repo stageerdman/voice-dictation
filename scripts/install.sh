@@ -40,5 +40,16 @@ cp -R sidecar "$DEST/Contents/Resources/sidecar"
 # per rebuild (the Log view + launch self-check show when a grant is missing).
 codesign --force --sign - "$DEST"
 
+# Clear the stale TCC grants for this bundle id. Under ad-hoc signing the grant
+# is tied to the binary's hash, which changes every build — so the old entry
+# stays listed and *green* but no longer applies to the new binary, and macOS
+# silently treats the app as untrusted (AXIsProcessTrusted() == false). Removing
+# the dead entries means the next launch gets a clean re-prompt instead of a
+# green-but-broken toggle you'd otherwise have to remove by hand.
+BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Info.plist 2>/dev/null || echo com.voicedictator.app)"
+tccutil reset Accessibility "$BUNDLE_ID" >/dev/null 2>&1 || true
+tccutil reset Microphone "$BUNDLE_ID" >/dev/null 2>&1 || true
+
 echo "Installed → $DEST"
-echo "Note: after a rebuild, re-grant Accessibility & Microphone to \"$APP_NAME\" once."
+echo "Note: cleared old Accessibility/Microphone grants for $BUNDLE_ID."
+echo "      Launch \"$APP_NAME\" and allow both when prompted — once per rebuild."

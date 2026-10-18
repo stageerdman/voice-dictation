@@ -202,7 +202,7 @@ final class MenuBarController {
             content.body = "Microphone access is off. Turn it on in System Settings → Privacy & Security → Microphone."
         } else {
             content.title = "Voice Dictator can't type for you"
-            content.body = "Grant Accessibility access so dictated text can be inserted. System Settings → Privacy & Security → Accessibility."
+            content.body = "Grant Accessibility so dictated text can be inserted: System Settings → Privacy & Security → Accessibility. If it's already listed, a rebuild invalidated it — remove it with “–” and re-add."
         }
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, _ in
