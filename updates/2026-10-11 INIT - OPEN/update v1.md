@@ -187,6 +187,31 @@ reset (fixed by re-granting), and made the app **official**: renamed to
 menu-bar glyph (now template white), dropped the signing-identity machinery.
 All committed & pushed (`2447040`, `a89b417`).
 
+## Handoff addendum (2026-10-18)
+Two reliability fixes this session, both committed & pushed:
+- **History is now the reliable record (`ecf5c9b`).** Root cause of "transcription
+  not saved when it didn't paste": `DictationController.process()` called
+  `history.add()` *after* insertion and returned early on any insertion error, so
+  a failed paste lost the words entirely. Now the final text is saved to History
+  **unconditionally** — success or failure — and each `DictationEntry` carries an
+  `inserted: Bool`. Un-inserted entries show a **"Not inserted"** badge in History
+  and can be copied / re-inserted from there. `DictationEntry` decodes tolerantly
+  (missing flag → `true`) so old history still loads. New `HistoryStoreTests` lock
+  in the flag round-trip + legacy decode (all green).
+- **Stale-but-green Accessibility grant (`e90d3da`).** Owner hit the known ad-hoc
+  TCC trap: System Settings showed the app *enabled* but `AXIsProcessTrusted()`
+  was false (grant keyed to the old binary hash; rebuild changed it). Fix:
+  `scripts/install.sh` now runs `tccutil reset Accessibility|Microphone
+  <bundle-id>` after signing, so each rebuild drops the dead entry and the next
+  launch gets a clean re-prompt. Error/self-check/notification copy updated to say
+  "if already listed, remove with – and re-add." Decision confirmed: **stay
+  ad-hoc** (owner declined the stable self-signed cert again).
+
+**Still owner-verify on resume:** launch Voice Dictator, grant Accessibility +
+Microphone fresh (install cleared them), dictate → confirm paste lands; then force
+a failed paste (dictate before granting) → confirm it shows in History tagged
+"Not inserted". The fresh signed build is already in /Applications.
+
 ## NEXT STEP (resume here)
 **First, verify the renamed app on the owner's Mac** (couldn't be auto-verified —
 UI driving needs the pending Accessibility grant):

@@ -31,13 +31,22 @@ Running list. Resolved items move to the relevant update's wiki.md.
   "broken again".) Fix: MLXSidecar.childEnvironment() now prepends
   /opt/homebrew/bin, /usr/local/bin, and the venv's bin to the sidecar's PATH,
   so ffmpeg resolves regardless of launch context. Locked in by MLXSidecarTests.
+- RESOLVED 2026-10-18 — transcription not saved to History when the paste
+  failed. DictationController.process() saved to History only *after* a
+  successful insertion and returned early on insertion errors, so a failed paste
+  lost the words. Fix: the final text is now saved to History unconditionally,
+  with a per-entry `inserted: Bool`; un-inserted entries show a "Not inserted"
+  badge and can be copied / re-inserted. Backward-compatible decode; locked in by
+  HistoryStoreTests. (ecf5c9b)
 - Ad-hoc signing resets macOS permission grants on every rebuild (the signature
   changes, so TCC treats it as a new app). Symptom: "records but no text" or
   "constantly asks for Accessibility" even when it looks granted (stale entry
-  bound to the old signature). Fix: `tccutil reset Accessibility
-  com.voicedictator.app`, relaunch, re-grant once. Accepted tradeoff — signing
-  identity was intentionally dropped. The Log view + launch self-check now make a
-  missing grant obvious. (Diagnosed/handled 2026-10-12.)
+  bound to the old signature). HANDLED 2026-10-18 — `scripts/install.sh` now runs
+  `tccutil reset Accessibility|Microphone com.voicedictator.app` after signing, so
+  each rebuild clears the dead entry and the next launch re-prompts cleanly; just
+  relaunch and allow. (A stale entry from before this change must be removed in
+  System Settings with "–" and re-added.) Accepted tradeoff — signing identity
+  intentionally dropped (owner reconfirmed ad-hoc 2026-10-18). (e90d3da)
 - Not yet visually verified on 2026-10-12 (UI driving needs the pending
   Accessibility grant): the white menu-bar glyph, the Finder app icon, and the
   History|Log switcher rendering. Owner to confirm on resume.
