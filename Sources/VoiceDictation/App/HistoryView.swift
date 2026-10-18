@@ -242,6 +242,14 @@ private struct HistoryRow: View {
                 .truncationMode(.tail)
             HStack(spacing: 6) {
                 Text(metadata).font(.caption).foregroundStyle(.secondary)
+                if !entry.inserted {
+                    Text("Not inserted")
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.orange.opacity(0.18), in: Capsule())
+                        .foregroundStyle(.orange)
+                        .help("This transcription wasn't pasted — copy or re-insert it from here.")
+                }
                 Spacer()
                 if hovering {
                     Button(action: onCopy) { Image(systemName: "doc.on.doc") }
@@ -262,7 +270,7 @@ private struct HistoryRow: View {
             Button("Delete", role: .destructive, action: onDelete)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.text). \(metadata)")
+        .accessibilityLabel("\(entry.text). \(metadata)\(entry.inserted ? "" : ". Not inserted")")
     }
 
     private var metadata: String {

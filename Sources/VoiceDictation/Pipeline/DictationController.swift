@@ -129,25 +129,43 @@ final class DictationController {
             log.info(.cleanup, "Cleanup applied (\(cleanupMode.rawValue))")
         }
 
+        // Nothing meaningful to insert or save.
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            fail("No speech heard", category: .transcription, isPermission: false)
+            return
+        }
+
+        // Insert at the cursor, but treat History as the reliable record: the
+        // transcription is saved below *regardless* of whether the paste lands,
+        // so a failed insertion never loses the words.
         state = .inserting
+        var insertionError: (message: String, category: LogCategory, isPermission: Bool, detail: String?)?
+        var inserted = false
         do {
             try inserter.insert(text)
+            inserted = true
         } catch TextInserter.InsertionError.accessibilityNotGranted {
-            fail("Accessibility access needed — can't insert text", category: .permission, isPermission: true,
-                 detail: "Grant Accessibility to Voice Dictator in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild this grant resets.")
-            return
+            insertionError = ("Accessibility access needed — can't insert text", .permission, true,
+                "Grant Accessibility to Voice Dictator in System Settings → Privacy & Security → Accessibility, then relaunch. After an ad-hoc rebuild this grant resets. Your words are saved in History — open it to copy or re-insert them.")
         } catch {
-            fail("Couldn't insert text", category: .insertion, isPermission: false,
-                 detail: error.localizedDescription)
-            return
+            insertionError = ("Couldn't insert text — saved to History", .insertion, false,
+                error.localizedDescription)
         }
 
         history.add(DictationEntry(
             text: text,
             date: Date(),
             duration: recording.duration,
-            targetApp: inserter.lastTargetApp
+            targetApp: inserted ? inserter.lastTargetApp : nil,
+            inserted: inserted
         ))
+
+        if let e = insertionError {
+            log.info(.insertion, "Saved transcription to History despite insertion failure")
+            fail(e.message, category: e.category, isPermission: e.isPermission, detail: e.detail)
+            return
+        }
+
         log.info(.insertion, "Inserted into \(inserter.lastTargetApp ?? "frontmost app")")
 
         state = .success

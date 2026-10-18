@@ -9,13 +9,33 @@ struct DictationEntry: Codable, Identifiable, Equatable {
     let duration: TimeInterval
     /// App the text was inserted into (localized name), if known.
     let targetApp: String?
+    /// Whether the text actually landed at the cursor. When insertion fails
+    /// (no Accessibility grant, paste rejected, …) the transcription is still
+    /// saved here — this flag records that it wasn't pasted, so it can be
+    /// found and re-inserted or copied from History.
+    let inserted: Bool
 
-    init(id: UUID = UUID(), text: String, date: Date, duration: TimeInterval, targetApp: String?) {
+    init(id: UUID = UUID(), text: String, date: Date, duration: TimeInterval,
+         targetApp: String?, inserted: Bool = true) {
         self.id = id
         self.text = text
         self.date = date
         self.duration = duration
         self.targetApp = targetApp
+        self.inserted = inserted
+    }
+
+    // Decode tolerantly: history written before `inserted` existed predates the
+    // reliable-save change, when only successful insertions were ever saved —
+    // so a missing flag means it was inserted.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        text = try c.decode(String.self, forKey: .text)
+        date = try c.decode(Date.self, forKey: .date)
+        duration = try c.decode(TimeInterval.self, forKey: .duration)
+        targetApp = try c.decodeIfPresent(String.self, forKey: .targetApp)
+        inserted = try c.decodeIfPresent(Bool.self, forKey: .inserted) ?? true
     }
 }
 
