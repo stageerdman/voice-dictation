@@ -4,7 +4,7 @@ import AppKit
 /// chord goes down and `onStop` when it's released — system-wide, while any app
 /// is focused. Uses an `NSEvent` global monitor (needs Accessibility permission).
 ///
-/// Modifier-only chords (e.g. ⌘+⌥) are intentional: they're easy to hold and
+/// Modifier-only chords (e.g. ⌘+⌃) are intentional: they're easy to hold and
 /// rarely pressed alone, so they make a natural push-to-talk trigger.
 @MainActor
 final class HotkeyMonitor {
@@ -17,7 +17,7 @@ final class HotkeyMonitor {
     private var monitor: Any?
     private var active = false
 
-    init(chord: NSEvent.ModifierFlags = [.command, .option]) {
+    init(chord: NSEvent.ModifierFlags = [.command, .control]) {
         self.chord = chord
     }
 

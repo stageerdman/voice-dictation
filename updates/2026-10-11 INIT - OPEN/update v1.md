@@ -207,6 +207,14 @@ Two reliability fixes this session, both committed & pushed:
   "if already listed, remove with – and re-add." Decision confirmed: **stay
   ad-hoc** (owner declined the stable self-signed cert again).
 
+- **Hotkey changed ⌘⌥ → ⌘⌃ (2026-10-19).** Owner asked to move the
+  push-to-talk chord off Command+Option to Command+Control. Changed the
+  `HotkeyMonitor` default chord `[.command, .option]` → `[.command, .control]`
+  and updated every ⌘⌥ label (Settings, menu-bar tooltip+title, History empty
+  state) to ⌘⌃. Still hard-coded (no settings UI for the chord yet). Rebuilt +
+  installed; **owner to re-grant Accessibility/Microphone and confirm ⌘⌃ fires**.
+  Note: ⌘⌃ brushes a few macOS system chords — flag if conflicts show up.
+
 **Still owner-verify on resume:** launch Voice Dictator, grant Accessibility +
 Microphone fresh (install cleared them), dictate → confirm paste lands; then force
 a failed paste (dictate before granting) → confirm it shows in History tagged
@@ -216,7 +224,7 @@ a failed paste (dictate before granting) → confirm it shows in History tagged
 **First, verify the renamed app on the owner's Mac** (couldn't be auto-verified —
 UI driving needs the pending Accessibility grant):
 1. Grant **Accessibility + Microphone** to *Voice Dictator* (new bundle id →
-   fresh grants). Then hold ⌘⌥, speak → confirm text lands at the cursor.
+   fresh grants). Then hold ⌘⌃, speak → confirm text lands at the cursor.
 2. Eyeball the **menu-bar glyph is white** (not black) and the **Finder/app icon**
    looks right.
 3. Open the menu → History… → flip the **History | Log** switch; confirm the Log

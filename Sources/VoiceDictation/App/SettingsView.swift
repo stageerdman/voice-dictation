@@ -96,7 +96,7 @@ private struct GeneralSettings: View {
 
             Section("Shortcut") {
                 LabeledContent("Hold to dictate") {
-                    Text("⌘⌥").font(.body.monospaced())
+                    Text("⌘⌃").font(.body.monospaced())
                         .padding(.horizontal, 8).padding(.vertical, 2)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color(.unemphasizedSelectedContentBackgroundColor)))
                 }

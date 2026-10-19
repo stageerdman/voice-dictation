@@ -69,9 +69,9 @@ final class MenuBarController {
 
         let dictate = NSMenuItem(title: "Dictate", action: nil, keyEquivalent: "")
         dictate.isEnabled = false
-        dictate.toolTip = "Hold ⌘⌥ anywhere, speak, release"
+        dictate.toolTip = "Hold ⌘⌃ anywhere, speak, release"
         // Show the binding on the trailing side.
-        dictate.title = "Dictate                     ⌘⌥ hold"
+        dictate.title = "Dictate                     ⌘⌃ hold"
         menu.addItem(dictate)
 
         menu.addItem(.separator())

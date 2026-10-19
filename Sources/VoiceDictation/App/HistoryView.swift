@@ -295,7 +295,7 @@ private struct EmptyHistory: View {
             Image(systemName: "waveform")
                 .font(.system(size: 40)).foregroundStyle(.tertiary)
             Text("No dictations yet").fontWeight(.medium)
-            Text("Hold ⌘⌥ anywhere, speak, and release. Your words land at the cursor — and show up here.")
+            Text("Hold ⌘⌃ anywhere, speak, and release. Your words land at the cursor — and show up here.")
                 .font(.callout).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center).frame(maxWidth: 360)
         }
