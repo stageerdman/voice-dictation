@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import UserNotifications
 
 /// Owns the menu-bar status item: the `waveform` glyph whose color/animation
@@ -7,7 +8,7 @@ import UserNotifications
 /// transcribing, a green check on success, orange on error; only permission
 /// errors raise a notification.
 @MainActor
-final class MenuBarController {
+final class MenuBarController: NSObject {
     private let controller: DictationController
     private let statusItem: NSStatusItem
     private let hud = RecordingHUD()
@@ -16,6 +17,8 @@ final class MenuBarController {
     private var historyWindow: HistoryWindowController?
     private var headerItem: NSMenuItem!
     private var permissionItem: NSMenuItem!
+    private var dictateItem: NSMenuItem!
+    private var micItem: NSMenuItem!
 
     private var reduceMotion: Bool {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -24,12 +27,17 @@ final class MenuBarController {
     init(controller: DictationController) {
         self.controller = controller
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        super.init()
         configureButton()
         buildMenu()
         apply(.idle)
 
         controller.onStateChange = { [weak self] state in self?.apply(state) }
         controller.onLevel = { [weak self] level in self?.hud.update(level: level) }
+
+        NotificationCenter.default.addObserver(forName: .voiceDictatorHotkeyChordChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshHotkeyLabel() }
+        }
     }
 
     private func configureButton() {
@@ -67,14 +75,17 @@ final class MenuBarController {
 
         menu.addItem(.separator())
 
-        let dictate = NSMenuItem(title: "Dictate", action: nil, keyEquivalent: "")
-        dictate.isEnabled = false
-        dictate.toolTip = "Hold ⌘⌃ anywhere, speak, release"
-        // Show the binding on the trailing side.
-        dictate.title = "Dictate                     ⌘⌃ hold"
-        menu.addItem(dictate)
+        dictateItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        dictateItem.isEnabled = false
+        menu.addItem(dictateItem)
 
         menu.addItem(.separator())
+
+        micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+        let micMenu = NSMenu()
+        micMenu.delegate = self
+        micItem.submenu = micMenu
+        menu.addItem(micItem)
 
         menu.addItem(withTitle: "History…", action: #selector(openHistory), keyEquivalent: "y").target = self
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -91,7 +102,16 @@ final class MenuBarController {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Voice Dictator", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
+        menu.delegate = self
         statusItem.menu = menu
+        refreshHotkeyLabel()
+    }
+
+    private func refreshHotkeyLabel() {
+        let symbols = AppSettings.shared.hotkeyChord.symbolString
+        dictateItem.toolTip = "Hold \(symbols) anywhere, speak, release"
+        // Show the binding on the trailing side.
+        dictateItem.title = "Dictate                     \(symbols) hold"
     }
 
     @objc private func openSettings() {
@@ -216,5 +236,56 @@ final class MenuBarController {
 
     @objc private func openAccessibilitySettings() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+    }
+
+    // MARK: - Microphone
+
+    @objc private func selectMicrophone(_ sender: NSMenuItem) {
+        AppSettings.shared.preferredInputDeviceUID = sender.representedObject as? String
+    }
+
+    private func refreshMicrophoneTitle() {
+        let preferredUID = AppSettings.shared.preferredInputDeviceUID
+        if let preferredUID, let match = AudioDeviceDirectory.inputDevices().first(where: { $0.uid == preferredUID }) {
+            micItem.title = "Microphone  (\(match.name))"
+        } else {
+            micItem.title = "Microphone"
+        }
+    }
+
+    private func rebuildMicrophoneMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let micAuthorized = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let preferredUID = AppSettings.shared.preferredInputDeviceUID
+
+        let defaultItem = NSMenuItem(title: "System Default", action: #selector(selectMicrophone(_:)), keyEquivalent: "")
+        defaultItem.target = self
+        defaultItem.state = preferredUID == nil ? .on : .off
+        menu.addItem(defaultItem)
+
+        let devices = AudioDeviceDirectory.inputDevices()
+        if !devices.isEmpty {
+            menu.addItem(.separator())
+            for device in devices {
+                let item = NSMenuItem(title: device.name, action: #selector(selectMicrophone(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = device.uid
+                item.state = preferredUID == device.uid ? .on : .off
+                item.isEnabled = micAuthorized
+                menu.addItem(item)
+            }
+        }
+
+        refreshMicrophoneTitle()
+    }
+}
+
+extension MenuBarController: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        if menu === statusItem.menu { refreshMicrophoneTitle() }
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === micItem.submenu { rebuildMicrophoneMenu(menu) }
     }
 }

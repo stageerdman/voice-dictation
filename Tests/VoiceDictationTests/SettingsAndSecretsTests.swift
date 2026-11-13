@@ -12,6 +12,8 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(s.transcriptionModel, .parakeet)
         XCTAssertEqual(s.cleanupMode, .none)
         XCTAssertEqual(s.language, "en")
+        XCTAssertEqual(s.hotkeyChord, HotkeyChord(modifiers: [.command, .control], keyCode: nil, keyLabel: nil))
+        XCTAssertNil(s.preferredInputDeviceUID)
     }
 
     func testRoundTrip() {
@@ -20,12 +22,32 @@ final class SettingsTests: XCTestCase {
         s.transcriptionModel = .whisperTurbo
         s.cleanupMode = .localLLM
         s.language = "de"
+        s.hotkeyChord = HotkeyChord(modifiers: [.command, .option], keyCode: nil, keyLabel: nil)
+        s.preferredInputDeviceUID = "some-device-uid"
 
         // A new instance over the same defaults must read the saved values.
         let reloaded = AppSettings(defaults: defaults)
         XCTAssertEqual(reloaded.transcriptionModel, .whisperTurbo)
         XCTAssertEqual(reloaded.cleanupMode, .localLLM)
         XCTAssertEqual(reloaded.language, "de")
+        XCTAssertEqual(reloaded.hotkeyChord, HotkeyChord(modifiers: [.command, .option], keyCode: nil, keyLabel: nil))
+        XCTAssertEqual(reloaded.preferredInputDeviceUID, "some-device-uid")
+    }
+
+    func testHotkeyChordRoundTripsWithKeyCode() {
+        let defaults = freshDefaults()
+        let s = AppSettings(defaults: defaults)
+        s.hotkeyChord = HotkeyChord(modifiers: [.control], keyCode: 9, keyLabel: "V")
+
+        let reloaded = AppSettings(defaults: defaults)
+        XCTAssertEqual(reloaded.hotkeyChord, HotkeyChord(modifiers: [.control], keyCode: 9, keyLabel: "V"))
+    }
+
+    func testHotkeyChordChangePostsNotification() {
+        let s = AppSettings(defaults: freshDefaults())
+        let expectation = expectation(forNotification: .voiceDictatorHotkeyChordChanged, object: nil)
+        s.hotkeyChord = HotkeyChord(modifiers: [.control, .shift], keyCode: nil, keyLabel: nil)
+        wait(for: [expectation], timeout: 1)
     }
 
     func testBackendIDsAreStable() {

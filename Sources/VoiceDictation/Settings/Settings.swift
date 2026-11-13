@@ -1,4 +1,12 @@
+import AppKit
 import Foundation
+
+extension Notification.Name {
+    /// Posted by `AppSettings.hotkeyChord`'s setter whenever the push-to-talk
+    /// chord changes, so the live `HotkeyMonitor` and menu-bar label can stay
+    /// in sync without a direct reference to Settings.
+    static let voiceDictatorHotkeyChordChanged = Notification.Name("VoiceDictator.hotkeyChordChanged")
+}
 
 /// A transcription backend the user can choose. On-device options need no key;
 /// the cloud option is only usable when a Groq key is present.
@@ -74,6 +82,10 @@ final class AppSettings: @unchecked Sendable {
         static let cleanup = "cleanupMode"
         static let language = "language"
         static let launchAtLogin = "launchAtLogin"
+        static let hotkeyChord = "hotkeyChord"
+        static let hotkeyKeyCode = "hotkeyKeyCode"
+        static let hotkeyKeyLabel = "hotkeyKeyLabel"
+        static let preferredInputDevice = "preferredInputDeviceUID"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -99,5 +111,41 @@ final class AppSettings: @unchecked Sendable {
     var launchAtLogin: Bool {
         get { defaults.bool(forKey: Key.launchAtLogin) }
         set { defaults.set(newValue, forKey: Key.launchAtLogin) }
+    }
+
+    /// The chord held to trigger dictation. Defaults to ⌘+⌃.
+    var hotkeyChord: HotkeyChord {
+        get {
+            let modifiers: NSEvent.ModifierFlags
+            if let raw = defaults.object(forKey: Key.hotkeyChord) as? UInt {
+                modifiers = NSEvent.ModifierFlags(rawValue: raw)
+            } else {
+                modifiers = HotkeyChord.default.modifiers
+            }
+            guard let rawKeyCode = defaults.object(forKey: Key.hotkeyKeyCode) as? Int else {
+                return HotkeyChord(modifiers: modifiers, keyCode: nil, keyLabel: nil)
+            }
+            return HotkeyChord(modifiers: modifiers, keyCode: UInt16(rawKeyCode),
+                                keyLabel: defaults.string(forKey: Key.hotkeyKeyLabel))
+        }
+        set {
+            defaults.set(newValue.modifiers.rawValue, forKey: Key.hotkeyChord)
+            if let keyCode = newValue.keyCode {
+                defaults.set(Int(keyCode), forKey: Key.hotkeyKeyCode)
+                defaults.set(newValue.keyLabel, forKey: Key.hotkeyKeyLabel)
+            } else {
+                defaults.removeObject(forKey: Key.hotkeyKeyCode)
+                defaults.removeObject(forKey: Key.hotkeyKeyLabel)
+            }
+            NotificationCenter.default.post(name: .voiceDictatorHotkeyChordChanged, object: nil)
+        }
+    }
+
+    /// The Core Audio UID of the mic to record from. `nil` means "system
+    /// default" — the common case, and also the automatic fallback if this
+    /// device disconnects.
+    var preferredInputDeviceUID: String? {
+        get { defaults.string(forKey: Key.preferredInputDevice) }
+        set { defaults.set(newValue, forKey: Key.preferredInputDevice) }
     }
 }

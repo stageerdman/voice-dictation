@@ -55,6 +55,14 @@ final class DictationController {
         }
         self.hotkey.onStart = { [weak self] in self?.beginRecording() }
         self.hotkey.onStop = { [weak self] in self?.finishRecording() }
+        self.hotkey.chord = settings.hotkeyChord
+
+        NotificationCenter.default.addObserver(forName: .voiceDictatorHotkeyChordChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.hotkey.chord = self.settings.hotkeyChord
+            }
+        }
     }
 
     var historyStore: HistoryStore { history }
@@ -75,6 +83,9 @@ final class DictationController {
         }
         do {
             try recorder.start()
+            if recorder.didFallBackToDefaultDevice {
+                log.info(.audio, "Preferred input device disconnected, falling back to System Default")
+            }
             log.info(.audio, "Recording started")
             state = .recording
         } catch {

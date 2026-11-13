@@ -30,6 +30,9 @@ final class SettingsModel: ObservableObject {
     @Published var language: String {
         didSet { AppSettings.shared.language = language }
     }
+    @Published var hotkeyChord: HotkeyChord {
+        didSet { AppSettings.shared.hotkeyChord = hotkeyChord }
+    }
 
     let hasGroqKey = Secrets.shared.hasGroqKey
     let hasAnthropicKey = Secrets.shared.hasAnthropicKey
@@ -38,6 +41,7 @@ final class SettingsModel: ObservableObject {
         model = AppSettings.shared.transcriptionModel
         cleanup = AppSettings.shared.cleanupMode
         language = AppSettings.shared.language
+        hotkeyChord = AppSettings.shared.hotkeyChord
     }
 }
 
@@ -95,13 +99,7 @@ private struct GeneralSettings: View {
             }
 
             Section("Shortcut") {
-                LabeledContent("Hold to dictate") {
-                    Text("⌘⌃").font(.body.monospaced())
-                        .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(.unemphasizedSelectedContentBackgroundColor)))
-                }
-                Text("Hold the keys, speak, release to insert.")
-                    .font(.caption).foregroundStyle(.secondary)
+                ShortcutField(chord: $m.hotkeyChord)
             }
 
             Section("Language") {
@@ -142,6 +140,74 @@ private struct GeneralSettings: View {
         case .claudeCLI: return "Best quality via the local Claude CLI. No key; needs network. A few seconds."
         case .localLLM:  return "On-device MLX model. Fully private, no network. A few seconds."
         }
+    }
+}
+
+/// Lets the user rebind the push-to-talk chord: click "Change…", hold the new
+/// keys (mirroring the trigger gesture itself), then either release to
+/// finalize a modifier-only chord or press a regular key to pair it with the
+/// modifiers held so far. Modifier-only chords need at least two modifiers so
+/// they can't fire from ordinary typing; a letter chord needs just one.
+private struct ShortcutField: View {
+    @Binding var chord: HotkeyChord
+    @State private var recorder = ShortcutRecorder()
+    @State private var isCapturing = false
+    @State private var liveSymbols = ""
+    @State private var errorText: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent("Hold to dictate") {
+                HStack(spacing: 8) {
+                    Text(isCapturing ? (liveSymbols.isEmpty ? "Press keys…" : liveSymbols) : chord.symbolString)
+                        .font(.body.monospaced())
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(.unemphasizedSelectedContentBackgroundColor)))
+                    Button(isCapturing ? "Cancel" : "Change…") {
+                        isCapturing ? cancel() : begin()
+                    }
+                }
+            }
+            Text(errorText ?? "Hold the keys, speak, release to insert.")
+                .font(.caption)
+                .foregroundStyle(errorText == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+        }
+        .onDisappear { recorder.cancel() }
+    }
+
+    private func begin() {
+        errorText = nil
+        liveSymbols = ""
+        isCapturing = true
+        recorder.onLiveChange = { flags in liveSymbols = flags.symbolString }
+        recorder.onFinish = { finish($0) }
+        recorder.begin()
+    }
+
+    private func cancel() {
+        recorder.cancel()
+        isCapturing = false
+        liveSymbols = ""
+        errorText = nil
+    }
+
+    private func finish(_ captured: HotkeyChord) {
+        isCapturing = false
+        liveSymbols = ""
+        guard captured != chord else { return }  // changed their mind, or picked the same chord
+        let modifierCount = [NSEvent.ModifierFlags.command, .option, .control, .shift]
+            .filter { captured.modifiers.contains($0) }.count
+        let minimumModifiers = captured.keyCode == nil ? 2 : 1
+        guard modifierCount >= minimumModifiers else {
+            errorText = captured.keyCode == nil
+                ? "Needs at least two keys, like ⌘⌃."
+                : "Needs at least one modifier, like ⌃V."
+            return
+        }
+        chord = captured
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                              userInfo: [.announcement: "Shortcut changed to \(captured.symbolString)",
+                                         .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 }
 

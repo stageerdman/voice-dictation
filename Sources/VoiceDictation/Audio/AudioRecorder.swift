@@ -1,3 +1,4 @@
+import AudioToolbox
 import AVFoundation
 
 /// Captures the microphone to a temporary WAV file while the hotkey is held.
@@ -20,13 +21,20 @@ final class AudioRecorder {
     /// Called on the audio thread with each new level sample; hop to main in UI.
     var onLevel: ((Float) -> Void)?
 
+    /// True after the most recent `start()` if the preferred input device
+    /// (from Settings) wasn't found — i.e. it disconnected — and recording
+    /// silently fell back to the system default instead.
+    private(set) var didFallBackToDefaultDevice = false
+
     enum RecorderError: Error { case couldNotCreateFile(Error), engineFailed(Error) }
 
     func start() throws {
         guard !isRecording else { return }
+        didFallBackToDefaultDevice = false
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("voicedictation-\(UUID().uuidString).wav")
         let input = engine.inputNode
+        applyPreferredInputDevice(to: input)
         let format = input.outputFormat(forBus: 0)
 
         do {
@@ -69,6 +77,28 @@ final class AudioRecorder {
         startTime = nil
         guard let url else { return nil }
         return Recording(url: url, duration: duration)
+    }
+
+    /// Points the engine's input at the user's preferred device, falling
+    /// back to the system default (and flagging it) if that device isn't
+    /// currently connected. Re-applied on every `start()` since a disconnect
+    /// can happen between dictations. A no-op when no preference is set —
+    /// leaving the engine's own default-device management untouched avoids
+    /// re-pinning the HAL unit to a device it's already on, which stales the
+    /// node's cached format and crashes `installTap` with a format mismatch.
+    private func applyPreferredInputDevice(to input: AVAudioInputNode) {
+        guard let preferredUID = AppSettings.shared.preferredInputDeviceUID else { return }
+        guard let resolvedID = AudioDeviceDirectory.deviceID(forUID: preferredUID) else {
+            didFallBackToDefaultDevice = true
+            return
+        }
+        guard let audioUnit = input.audioUnit else { return }
+        var deviceID = resolvedID
+        AudioUnitSetProperty(audioUnit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+                              &deviceID, UInt32(MemoryLayout<AudioDeviceID>.size))
+        // Force the node to re-derive its format against the new device's
+        // native rate before `outputFormat(forBus:)` is read in `start()`.
+        engine.reset()
     }
 
     /// Normalized RMS level mapped to a perceptual 0...1 range for metering.
