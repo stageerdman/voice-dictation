@@ -119,7 +119,21 @@ final class DictationController {
         defer { deleteAudio(recording.url) }  // audio is transient — always remove it
 
         log.info(.audio, "Recording stopped",
-                 detail: String(format: "%.2fs of audio", recording.duration))
+                 detail: String(format: "%.2fs held, %.2fs captured", recording.duration, recording.capturedSeconds))
+
+        // Too little audio for the model to work with (it errors cryptically).
+        // An accidental tap just goes back to idle; a real hold that captured
+        // nothing means the mic is wedged — the recorder has already flagged a
+        // fresh engine for the next take, so just say so honestly.
+        guard recording.capturedSeconds >= 0.1 else {
+            if recording.duration < 0.5 {
+                state = .idle
+            } else {
+                fail("Microphone sent no audio — try again", category: .audio, isPermission: false,
+                     detail: "Input device delivered no samples; audio engine will be rebuilt for the next take.")
+            }
+            return
+        }
 
         let raw: String
         do {
@@ -130,6 +144,8 @@ final class DictationController {
             fail("No speech heard", category: .transcription, isPermission: false)
             return
         } catch {
+            // Don't let a bad take leave a stale engine behind for the next one.
+            recorder.rebuildEngine()
             fail("Transcription failed", category: .transcription, isPermission: false,
                  detail: error.localizedDescription)
             return
