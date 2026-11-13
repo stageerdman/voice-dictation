@@ -50,3 +50,12 @@ Running list. Resolved items move to the relevant update's wiki.md.
 - Not yet visually verified on 2026-10-12 (UI driving needs the pending
   Accessibility grant): the white menu-bar glyph, the Finder app icon, and the
   History|Log switcher rendering. Owner to confirm on resume.
+- Hotkey went dead after a failed transcription (2026-11-13). A 3s hold captured
+  no samples (USB PnP mic stalled) → Parakeet "[as_strided] Negative dimensions
+  not allowed"; the stale AVAudioEngine then raised an NSException from
+  installTap on the next press, which AppKit swallowed — every later press did
+  nothing, nothing logged, until relaunch. FIXED — ObjCExceptionCatcher shim
+  turns engine exceptions into errors; AudioRecorder rebuilds a fresh engine
+  (failed start → retry once; also after config change / empty take /
+  transcription failure); empty takes skip transcription with "Microphone sent
+  no audio". Not yet verified with a real wedged mic. (0da1c11)
