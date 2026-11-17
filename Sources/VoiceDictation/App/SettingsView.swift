@@ -33,6 +33,9 @@ final class SettingsModel: ObservableObject {
     @Published var hotkeyChord: HotkeyChord {
         didSet { AppSettings.shared.hotkeyChord = hotkeyChord }
     }
+    @Published var lockChord: HotkeyChord {
+        didSet { AppSettings.shared.lockChord = lockChord }
+    }
 
     let hasGroqKey = Secrets.shared.hasGroqKey
     let hasAnthropicKey = Secrets.shared.hasAnthropicKey
@@ -42,6 +45,7 @@ final class SettingsModel: ObservableObject {
         cleanup = AppSettings.shared.cleanupMode
         language = AppSettings.shared.language
         hotkeyChord = AppSettings.shared.hotkeyChord
+        lockChord = AppSettings.shared.lockChord
     }
 }
 
@@ -98,8 +102,15 @@ private struct GeneralSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Shortcut") {
-                ShortcutField(chord: $m.hotkeyChord)
+            Section("Shortcuts") {
+                ShortcutField(label: "Hold to dictate",
+                              caption: "Hold the keys, speak, release to insert.",
+                              chord: $m.hotkeyChord,
+                              other: m.lockChord, otherLabel: "Hands-free")
+                ShortcutField(label: "Hands-free",
+                              caption: "Press once to start, again to insert. Press while holding to keep listening.",
+                              chord: $m.lockChord,
+                              other: m.hotkeyChord, otherLabel: "Hold to dictate")
             }
 
             Section("Language") {
@@ -143,13 +154,18 @@ private struct GeneralSettings: View {
     }
 }
 
-/// Lets the user rebind the push-to-talk chord: click "Change…", hold the new
+/// Lets the user rebind a shortcut (push-to-talk or hands-free lock): click "Change…", hold the new
 /// keys (mirroring the trigger gesture itself), then either release to
 /// finalize a modifier-only chord or press a regular key to pair it with the
 /// modifiers held so far. Modifier-only chords need at least two modifiers so
 /// they can't fire from ordinary typing; a letter chord needs just one.
 private struct ShortcutField: View {
+    let label: String
+    let caption: String
     @Binding var chord: HotkeyChord
+    /// The other shortcut, which this one must not duplicate.
+    let other: HotkeyChord
+    let otherLabel: String
     @State private var recorder = ShortcutRecorder()
     @State private var isCapturing = false
     @State private var liveSymbols = ""
@@ -157,7 +173,7 @@ private struct ShortcutField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            LabeledContent("Hold to dictate") {
+            LabeledContent(label) {
                 HStack(spacing: 8) {
                     Text(isCapturing ? (liveSymbols.isEmpty ? "Press keys…" : liveSymbols) : chord.symbolString)
                         .font(.body.monospaced())
@@ -168,7 +184,7 @@ private struct ShortcutField: View {
                     }
                 }
             }
-            Text(errorText ?? "Hold the keys, speak, release to insert.")
+            Text(errorText ?? caption)
                 .font(.caption)
                 .foregroundStyle(errorText == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
         }
@@ -195,6 +211,10 @@ private struct ShortcutField: View {
         isCapturing = false
         liveSymbols = ""
         guard captured != chord else { return }  // changed their mind, or picked the same chord
+        guard captured != other else {
+            errorText = "Already used for \(otherLabel)."
+            return
+        }
         let modifierCount = [NSEvent.ModifierFlags.command, .option, .control, .shift]
             .filter { captured.modifiers.contains($0) }.count
         let minimumModifiers = captured.keyCode == nil ? 2 : 1
@@ -206,7 +226,7 @@ private struct ShortcutField: View {
         }
         chord = captured
         NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
-                              userInfo: [.announcement: "Shortcut changed to \(captured.symbolString)",
+                              userInfo: [.announcement: "\(label) shortcut changed to \(captured.symbolString)",
                                          .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 }

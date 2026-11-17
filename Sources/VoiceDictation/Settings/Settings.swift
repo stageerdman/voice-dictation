@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 extension Notification.Name {
-    /// Posted by `AppSettings.hotkeyChord`'s setter whenever the push-to-talk
+    /// Posted by `AppSettings`' chord setters whenever the push-to-talk or lock
     /// chord changes, so the live `HotkeyMonitor` and menu-bar label can stay
     /// in sync without a direct reference to Settings.
     static let voiceDictatorHotkeyChordChanged = Notification.Name("VoiceDictator.hotkeyChordChanged")
@@ -86,6 +86,9 @@ final class AppSettings: @unchecked Sendable {
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyKeyLabel = "hotkeyKeyLabel"
         static let preferredInputDevice = "preferredInputDeviceUID"
+        static let lockChord = "lockChord"
+        static let lockKeyCode = "lockKeyCode"
+        static let lockKeyLabel = "lockKeyLabel"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -115,30 +118,38 @@ final class AppSettings: @unchecked Sendable {
 
     /// The chord held to trigger dictation. Defaults to ⌘+⌃.
     var hotkeyChord: HotkeyChord {
-        get {
-            let modifiers: NSEvent.ModifierFlags
-            if let raw = defaults.object(forKey: Key.hotkeyChord) as? UInt {
-                modifiers = NSEvent.ModifierFlags(rawValue: raw)
-            } else {
-                modifiers = HotkeyChord.default.modifiers
-            }
-            guard let rawKeyCode = defaults.object(forKey: Key.hotkeyKeyCode) as? Int else {
-                return HotkeyChord(modifiers: modifiers, keyCode: nil, keyLabel: nil)
-            }
-            return HotkeyChord(modifiers: modifiers, keyCode: UInt16(rawKeyCode),
-                                keyLabel: defaults.string(forKey: Key.hotkeyKeyLabel))
+        get { chord(Key.hotkeyChord, Key.hotkeyKeyCode, Key.hotkeyKeyLabel, default: .default) }
+        set { setChord(newValue, Key.hotkeyChord, Key.hotkeyKeyCode, Key.hotkeyKeyLabel) }
+    }
+
+    /// The chord pressed once to start hands-free (locked) dictation and again
+    /// to stop and insert. Defaults to ⌥⌘V.
+    var lockChord: HotkeyChord {
+        get { chord(Key.lockChord, Key.lockKeyCode, Key.lockKeyLabel, default: .lockDefault) }
+        set { setChord(newValue, Key.lockChord, Key.lockKeyCode, Key.lockKeyLabel) }
+    }
+
+    private func chord(_ modsKey: String, _ codeKey: String, _ labelKey: String,
+                       default fallback: HotkeyChord) -> HotkeyChord {
+        guard let raw = defaults.object(forKey: modsKey) as? UInt else { return fallback }
+        let modifiers = NSEvent.ModifierFlags(rawValue: raw)
+        guard let rawKeyCode = defaults.object(forKey: codeKey) as? Int else {
+            return HotkeyChord(modifiers: modifiers, keyCode: nil, keyLabel: nil)
         }
-        set {
-            defaults.set(newValue.modifiers.rawValue, forKey: Key.hotkeyChord)
-            if let keyCode = newValue.keyCode {
-                defaults.set(Int(keyCode), forKey: Key.hotkeyKeyCode)
-                defaults.set(newValue.keyLabel, forKey: Key.hotkeyKeyLabel)
-            } else {
-                defaults.removeObject(forKey: Key.hotkeyKeyCode)
-                defaults.removeObject(forKey: Key.hotkeyKeyLabel)
-            }
-            NotificationCenter.default.post(name: .voiceDictatorHotkeyChordChanged, object: nil)
+        return HotkeyChord(modifiers: modifiers, keyCode: UInt16(rawKeyCode),
+                           keyLabel: defaults.string(forKey: labelKey))
+    }
+
+    private func setChord(_ chord: HotkeyChord, _ modsKey: String, _ codeKey: String, _ labelKey: String) {
+        defaults.set(chord.modifiers.rawValue, forKey: modsKey)
+        if let keyCode = chord.keyCode {
+            defaults.set(Int(keyCode), forKey: codeKey)
+            defaults.set(chord.keyLabel, forKey: labelKey)
+        } else {
+            defaults.removeObject(forKey: codeKey)
+            defaults.removeObject(forKey: labelKey)
         }
+        NotificationCenter.default.post(name: .voiceDictatorHotkeyChordChanged, object: nil)
     }
 
     /// The Core Audio UID of the mic to record from. `nil` means "system

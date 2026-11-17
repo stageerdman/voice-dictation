@@ -43,6 +43,18 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(reloaded.hotkeyChord, HotkeyChord(modifiers: [.control], keyCode: 9, keyLabel: "V"))
     }
 
+    func testLockChordDefaultsToOptionCommandVAndRoundTrips() {
+        let defaults = freshDefaults()
+        let s = AppSettings(defaults: defaults)
+        XCTAssertEqual(s.lockChord, HotkeyChord(modifiers: [.option, .command], keyCode: 9, keyLabel: "V"))
+
+        s.lockChord = HotkeyChord(modifiers: [.command, .shift, .control], keyCode: nil, keyLabel: nil)
+        let reloaded = AppSettings(defaults: defaults)
+        XCTAssertEqual(reloaded.lockChord, HotkeyChord(modifiers: [.command, .shift, .control], keyCode: nil, keyLabel: nil))
+        // Independent of the push-to-talk chord.
+        XCTAssertEqual(reloaded.hotkeyChord, .default)
+    }
+
     func testHotkeyChordChangePostsNotification() {
         let s = AppSettings(defaults: freshDefaults())
         let expectation = expectation(forNotification: .voiceDictatorHotkeyChordChanged, object: nil)

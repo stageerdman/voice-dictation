@@ -14,6 +14,8 @@ struct HotkeyChord: Equatable {
     var keyLabel: String?
 
     static let `default` = HotkeyChord(modifiers: [.command, .control], keyCode: nil, keyLabel: nil)
+    /// ⌥⌘V (key code 9 is V on ANSI layouts).
+    static let lockDefault = HotkeyChord(modifiers: [.option, .command], keyCode: 9, keyLabel: "V")
 
     var symbolString: String {
         modifiers.symbolString + (keyLabel ?? "")
@@ -22,7 +24,8 @@ struct HotkeyChord: Equatable {
 
 /// Global hold-to-talk hotkey. Fires `onStart` when the configured chord goes
 /// down and `onStop` when it's released — system-wide, while any app is
-/// focused. Uses `NSEvent` global monitors (needs Accessibility permission).
+/// focused. Separately, fires `onLockToggle` each time the lock chord is
+/// pressed (hands-free mode; the controller decides what a press means). Uses `NSEvent` global monitors (needs Accessibility permission).
 ///
 /// Two trigger shapes are supported:
 /// - Modifier-only (e.g. ⌘+⌃): tracked via `.flagsChanged`. Easy to hold and
@@ -34,16 +37,22 @@ struct HotkeyChord: Equatable {
 final class HotkeyMonitor {
     /// The chord that triggers dictation while held.
     var chord: HotkeyChord
+    /// The chord pressed (not held) to toggle hands-free dictation.
+    var lockChord: HotkeyChord
 
     var onStart: (() -> Void)?
     var onStop: (() -> Void)?
+    var onLockToggle: (() -> Void)?
 
     private var flagsMonitor: Any?
     private var keyMonitor: Any?
     private var active = false
+    /// Latch for a modifier-only lock chord, so one press fires once.
+    private var lockModifiersDown = false
 
-    init(chord: HotkeyChord = .default) {
+    init(chord: HotkeyChord = .default, lockChord: HotkeyChord = .lockDefault) {
         self.chord = chord
+        self.lockChord = lockChord
     }
 
     /// Whether a global keyboard monitor can see events — i.e. Accessibility is
@@ -58,7 +67,11 @@ final class HotkeyMonitor {
             MainActor.assumeIsolated { self?.handleFlagsChanged(event.modifierFlags) }
         }
         keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
-            MainActor.assumeIsolated { self?.handleKeyEvent(event) }
+            MainActor.assumeIsolated {
+                self?.handleKey(code: event.keyCode, isDown: event.type == .keyDown,
+                                isRepeat: event.type == .keyDown && event.isARepeat,
+                                flags: event.modifierFlags)
+            }
         }
     }
 
@@ -68,9 +81,32 @@ final class HotkeyMonitor {
         flagsMonitor = nil
         keyMonitor = nil
         active = false
+        lockModifiersDown = false
     }
 
-    private func handleFlagsChanged(_ flags: NSEvent.ModifierFlags) {
+    // Handlers take plain values (not NSEvent) so tests can drive them.
+
+    func handleFlagsChanged(_ flags: NSEvent.ModifierFlags) {
+        handleLockFlags(flags)
+        handleHoldFlags(flags)
+    }
+
+    func handleKey(code: UInt16, isDown: Bool, isRepeat: Bool, flags: NSEvent.ModifierFlags) {
+        if isDown, !isRepeat, let lockCode = lockChord.keyCode, code == lockCode,
+           flags.intersection(relevantHotkeyModifiers).contains(lockChord.modifiers) {
+            onLockToggle?()
+        }
+        handleHoldKey(code: code, isDown: isDown, flags: flags)
+    }
+
+    private func handleLockFlags(_ flags: NSEvent.ModifierFlags) {
+        guard lockChord.keyCode == nil else { return }
+        let down = flags.intersection(relevantHotkeyModifiers).contains(lockChord.modifiers)
+        if down && !lockModifiersDown { onLockToggle?() }
+        lockModifiersDown = down
+    }
+
+    private func handleHoldFlags(_ flags: NSEvent.ModifierFlags) {
         guard chord.keyCode == nil else {
             // Letter chords start/stop on the key itself; releasing a
             // required modifier early still cuts the hold short.
@@ -91,20 +127,17 @@ final class HotkeyMonitor {
         }
     }
 
-    private func handleKeyEvent(_ event: NSEvent) {
-        guard let keyCode = chord.keyCode, event.keyCode == keyCode else { return }
-        let relevant = event.modifierFlags.intersection(relevantHotkeyModifiers)
-        switch event.type {
-        case .keyDown:
+    private func handleHoldKey(code: UInt16, isDown: Bool, flags: NSEvent.ModifierFlags) {
+        guard let keyCode = chord.keyCode, code == keyCode else { return }
+        let relevant = flags.intersection(relevantHotkeyModifiers)
+        if isDown {
             guard !active, relevant.contains(chord.modifiers) else { return }
             active = true
             onStart?()
-        case .keyUp:
+        } else {
             guard active else { return }
             active = false
             onStop?()
-        default:
-            break
         }
     }
 }

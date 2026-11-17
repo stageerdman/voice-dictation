@@ -4,14 +4,16 @@ import AVFoundation
 /// The live state of a dictation, consumed by the menu-bar icon and HUD.
 enum DictationState: Equatable {
     case idle
-    case recording
+    /// `locked`: hands-free — keeps listening without holding keys until the
+    /// lock chord is pressed again.
+    case recording(locked: Bool)
     case transcribing
     case inserting
     case success
     case error(message: String, isPermission: Bool)
 }
 
-/// Orchestrates the one core flow: hold hotkey → record → transcribe → optional
+/// Orchestrates the one core flow: hold hotkey (or press the lock chord) → record → transcribe → optional
 /// cleanup → insert at cursor → save to history → delete the audio file.
 /// Each collaborator is injected so pieces stay swappable and testable.
 @MainActor
@@ -54,13 +56,16 @@ final class DictationController {
             DispatchQueue.main.async { self?.onLevel?(level) }
         }
         self.hotkey.onStart = { [weak self] in self?.beginRecording() }
-        self.hotkey.onStop = { [weak self] in self?.finishRecording() }
+        self.hotkey.onStop = { [weak self] in self?.releaseHold() }
+        self.hotkey.onLockToggle = { [weak self] in self?.toggleLock() }
         self.hotkey.chord = settings.hotkeyChord
+        self.hotkey.lockChord = settings.lockChord
 
         NotificationCenter.default.addObserver(forName: .voiceDictatorHotkeyChordChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.hotkey.chord = self.settings.hotkeyChord
+                self.hotkey.lockChord = self.settings.lockChord
             }
         }
     }
@@ -75,7 +80,37 @@ final class DictationController {
 
     // MARK: - Recording
 
-    private func beginRecording() {
+    private var isRecording: Bool {
+        if case .recording = state { return true }
+        return false
+    }
+
+    private var isLocked: Bool {
+        if case .recording(locked: true) = state { return true }
+        return false
+    }
+
+    /// Lock chord pressed. From idle: start hands-free. While holding
+    /// push-to-talk: keep listening after release. While locked: stop and insert.
+    private func toggleLock() {
+        switch state {
+        case .recording(locked: true):
+            finishRecording()
+        case .recording(locked: false):
+            state = .recording(locked: true)
+            log.info(.audio, "Recording locked (hands-free)")
+        default:
+            beginRecording(locked: true)
+        }
+    }
+
+    /// Push-to-talk released. A locked take ignores it and keeps listening.
+    private func releaseHold() {
+        guard !isLocked else { return }
+        finishRecording()
+    }
+
+    private func beginRecording(locked: Bool = false) {
         // Ignore the trigger if already recording or still processing a prior take.
         switch state {
         case .recording, .transcribing, .inserting: return
@@ -86,8 +121,8 @@ final class DictationController {
             if recorder.didFallBackToDefaultDevice {
                 log.info(.audio, "Preferred input device disconnected, falling back to System Default")
             }
-            log.info(.audio, "Recording started")
-            state = .recording
+            log.info(.audio, locked ? "Recording started (hands-free)" : "Recording started")
+            state = .recording(locked: locked)
         } catch {
             fail("Couldn't start recording", category: .audio, isPermission: false,
                  detail: error.localizedDescription)
@@ -95,8 +130,8 @@ final class DictationController {
     }
 
     private func finishRecording() {
-        guard state == .recording, let recording = recorder.stop() else {
-            if state == .recording { state = .idle }
+        guard isRecording, let recording = recorder.stop() else {
+            if isRecording { state = .idle }
             return
         }
         state = .transcribing

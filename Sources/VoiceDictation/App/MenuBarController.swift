@@ -18,6 +18,8 @@ final class MenuBarController: NSObject {
     private var headerItem: NSMenuItem!
     private var permissionItem: NSMenuItem!
     private var dictateItem: NSMenuItem!
+    private var lockItem: NSMenuItem!
+    private var wasLocked = false
     private var micItem: NSMenuItem!
 
     private var reduceMotion: Bool {
@@ -79,6 +81,10 @@ final class MenuBarController: NSObject {
         dictateItem.isEnabled = false
         menu.addItem(dictateItem)
 
+        lockItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        lockItem.isEnabled = false
+        menu.addItem(lockItem)
+
         menu.addItem(.separator())
 
         micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
@@ -112,6 +118,9 @@ final class MenuBarController: NSObject {
         dictateItem.toolTip = "Hold \(symbols) anywhere, speak, release"
         // Show the binding on the trailing side.
         dictateItem.title = "Dictate                     \(symbols) hold"
+        let lockSymbols = AppSettings.shared.lockChord.symbolString
+        lockItem.toolTip = "Press \(lockSymbols) to start, press again to insert"
+        lockItem.title = "Hands-free              \(lockSymbols) press"
     }
 
     @objc private func openSettings() {
@@ -139,6 +148,7 @@ final class MenuBarController: NSObject {
     // MARK: - State rendering
 
     private func apply(_ state: DictationState) {
+        defer { wasLocked = state == .recording(locked: true) }
         guard let button = statusItem.button else { return }
         button.layer?.removeAllAnimations()
         button.alphaValue = 1
@@ -152,13 +162,18 @@ final class MenuBarController: NSObject {
             headerItem.title = "Ready"
             hud.hide()
 
-        case .recording:
+        case .recording(let locked):
             button.image = Self.symbol("waveform")
             button.contentTintColor = .systemRed
-            button.setAccessibilityLabel("Voice Dictator, listening")
-            headerItem.title = "Listening…"
+            button.setAccessibilityLabel(locked ? "Voice Dictator, listening hands-free" : "Voice Dictator, listening")
+            headerItem.title = locked ? "Listening (hands-free)…" : "Listening…"
             if !reduceMotion { pulse(button, from: 1.0, to: 0.45, duration: 1.1) }
-            hud.showRecording(reduceMotion: reduceMotion)
+            hud.showRecording(locked: locked, reduceMotion: reduceMotion)
+            if locked && !wasLocked {
+                NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                                     userInfo: [.announcement: "Hands-free on",
+                                                .priority: NSAccessibilityPriorityLevel.high.rawValue])
+            }
 
         case .transcribing:
             button.image = Self.symbol("waveform")

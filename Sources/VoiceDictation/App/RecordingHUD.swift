@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// A small bottom-center capsule shown only while the user is actively holding
-/// the hotkey (recording) and during the brief transcribing tail. It proves the
+/// A small bottom-center capsule shown only while recording (held, or locked
+/// hands-free — marked with a small lock) and during the brief transcribing tail. It proves the
 /// mic is hearing them with a live level meter, never steals focus (so inserted
 /// text lands in the right app), and vanishes the moment text is inserted.
 @MainActor
@@ -10,8 +10,8 @@ final class RecordingHUD {
     private var panel: NSPanel?
     private let model = HUDModel()
 
-    func showRecording(reduceMotion: Bool) {
-        model.mode = .recording
+    func showRecording(locked: Bool, reduceMotion: Bool) {
+        model.mode = .recording(locked: locked)
         model.reduceMotion = reduceMotion
         present()
     }
@@ -63,8 +63,8 @@ final class RecordingHUD {
 /// Observable state the SwiftUI HUD renders from.
 @MainActor
 final class HUDModel: ObservableObject {
-    enum Mode { case recording, transcribing }
-    @Published var mode: Mode = .recording
+    enum Mode: Equatable { case recording(locked: Bool), transcribing }
+    @Published var mode: Mode = .recording(locked: false)
     @Published var level: Float = 0
     var reduceMotion = false
 }
@@ -83,8 +83,17 @@ private struct HUDView: View {
 
     @ViewBuilder private var content: some View {
         switch model.mode {
-        case .recording:
-            WaveformBars(level: model.level, reduceMotion: model.reduceMotion)
+        case .recording(let locked):
+            HStack(spacing: 6) {
+                if locked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .transition(.opacity)
+                }
+                WaveformBars(level: model.level, reduceMotion: model.reduceMotion)
+            }
+            .animation(model.reduceMotion ? nil : .easeOut(duration: 0.15), value: locked)
         case .transcribing:
             Image(systemName: "ellipsis")
                 .font(.system(size: 16, weight: .medium))
