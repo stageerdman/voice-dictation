@@ -75,6 +75,7 @@ final class DictationController {
 
     func start() {
         hotkey.start()
+        MLXSidecar.shared.warm(model: settings.transcriptionModel)
         state = .idle
     }
 

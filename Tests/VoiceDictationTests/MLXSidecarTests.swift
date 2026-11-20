@@ -27,4 +27,27 @@ final class MLXSidecarTests: XCTestCase {
         XCTAssertEqual(dirs.first, "/opt/homebrew/bin", "Homebrew should be first on PATH")
         XCTAssertEqual(dirs.count, Set(dirs).count, "PATH must not contain duplicates: \(dirs)")
     }
+
+    /// A request sent while another is in flight (e.g. a dictation during the
+    /// launch-time model warm-up) must queue and succeed, not fail as "busy".
+    func testConcurrentRequestsQueueInOrder() async throws {
+        let script = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fake_sidecar_\(UUID().uuidString).py")
+        try """
+        import json, sys, time
+        for line in sys.stdin:
+            req = json.loads(line)
+            time.sleep(0.3 if req["op"] == "warm" else 0.0)
+            print(json.dumps({"ok": True, "text": req["op"]}), flush=True)
+        """.write(to: script, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: script) }
+
+        let sidecar = MLXSidecar(pythonURL: URL(fileURLWithPath: "/usr/bin/python3"), scriptURL: script)
+        async let warm = sidecar.send(["op": "warm"])
+        try await Task.sleep(nanoseconds: 50_000_000)  // warm is in flight
+        let take = try await sidecar.send(["op": "transcribe"])
+        let warmed = try await warm
+        XCTAssertEqual(warmed, "warm")
+        XCTAssertEqual(take, "transcribe")
+    }
 }

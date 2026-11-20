@@ -59,3 +59,13 @@ Running list. Resolved items move to the relevant update's wiki.md.
   (failed start → retry once; also after config change / empty take /
   transcription failure); empty takes skip transcription with "Microphone sent
   no audio". Not yet verified with a real wedged mic. (0da1c11)
+- Model "stuck loading" for ~80s (2026-11-20). Log showed "loading parakeet
+  model" → 81s silence → HF Hub warning → ready 1s later. Cause: loading by HF
+  repo id makes huggingface_hub check the Hub for each file *before* using the
+  cached copy; on a slow/stalled network that blocks with retries (reproduced:
+  21s against an unreachable Hub). The sidecar also only started on the first
+  press, so that take paid the whole load. FIXED — sidecar resolves models to
+  the local snapshot offline first (Hub only if not downloaded; also stops
+  Whisper's per-take Hub check), and the app warms the selected model at launch
+  (~1s). Sidecar requests now queue FIFO so a take during warm-up waits instead
+  of failing "sidecar is busy". Locked in by MLXSidecarTests.

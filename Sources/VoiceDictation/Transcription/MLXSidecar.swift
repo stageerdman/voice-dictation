@@ -18,7 +18,10 @@ final class MLXSidecar: @unchecked Sendable {
     private var stdinPipe: Pipe?
     private var stdoutBuffer = Data()
     private var stderrBuffer = Data()
-    private var pending: CheckedContinuation<String, Error>?
+    /// Requests awaiting a reply, oldest first. The sidecar answers stdin lines
+    /// strictly in order, so each stdout line resolves the head of the queue —
+    /// a dictation sent while the launch-time warm-up is loading simply waits.
+    private var pending: [CheckedContinuation<String, Error>] = []
     private let lock = NSLock()
     private let log = LogStore.shared
 
@@ -76,18 +79,23 @@ final class MLXSidecar: @unchecked Sendable {
         let payload = try JSONSerialization.data(withJSONObject: request)
 
         return try await withCheckedThrowingContinuation { cont in
-            lock.lock()
-            guard pending == nil else {
-                lock.unlock()
-                cont.resume(throwing: TranscriptionError.failed("sidecar is busy"))
-                return
-            }
-            pending = cont
-            lock.unlock()
-
             var line = payload
             line.append(0x0A)
+            // Enqueue and write under one lock so queue order == stdin order.
+            lock.lock()
+            pending.append(cont)
             stdin.fileHandleForWriting.write(line)
+            lock.unlock()
+        }
+    }
+
+    /// Start the sidecar and load `model` now, so the first dictation after
+    /// launch doesn't pay the model-load cost. Fire-and-forget; failures are logged.
+    func warm(model: TranscriptionModel) {
+        guard !model.isCloud else { return }
+        Task { [log] in
+            do { _ = try await self.send(["op": "warm", "model": model.backendID]) }
+            catch { log.log(.warning, .sidecar, "Model warm-up failed", detail: "\(error)") }
         }
     }
 
@@ -153,8 +161,7 @@ final class MLXSidecar: @unchecked Sendable {
         while let nl = stdoutBuffer.firstIndex(of: 0x0A) {
             let line = stdoutBuffer.subdata(in: stdoutBuffer.startIndex..<nl)
             stdoutBuffer.removeSubrange(stdoutBuffer.startIndex...nl)
-            let cont = pending
-            pending = nil
+            let cont = pending.isEmpty ? nil : pending.removeFirst()
             lock.unlock()
             if let cont { Self.resume(cont, with: line) }
             lock.lock()

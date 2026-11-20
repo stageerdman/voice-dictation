@@ -6,6 +6,7 @@ on stdout, keeping MLX models warm across requests so each dictation pays no
 model-load cost — the low-latency pattern proven in the sibling `transcriber`
 project.
 
+Warm:     {"op": "warm", "model": "..."}  (preload so the first take is instant)
 Request:  {"audio_path": "/tmp/x.wav", "model": "mlx-community/parakeet-tdt-0.6b-v3", "language": "en"}
 Response: {"ok": true, "text": "..."}  |  {"ok": false, "error": "..."}
 
@@ -40,24 +41,63 @@ _CLEANUP_SYSTEM = (
 )
 
 
+def _resolve(repo: str) -> str:
+    """Return a local snapshot path for `repo` if it's already downloaded.
+
+    Loading by HF repo id makes huggingface_hub ask the Hub whether the cached
+    copy is current *before* using it. On a slow or stalled network (Wi-Fi just
+    woke, DNS hiccup, Hub slow) that check blocks with retries — a cached
+    0.6B model once took 82s to "load" for that reason alone. Resolving offline
+    first means a cached model never touches the network; only a model that
+    isn't downloaded yet goes to the Hub.
+    """
+    if os.path.isdir(repo):
+        return repo
+    try:
+        from huggingface_hub import snapshot_download
+
+        return snapshot_download(repo, local_files_only=True)
+    except Exception:
+        log(f"{repo} not cached locally — downloading from the Hub")
+        return repo
+
+
 def _is_parakeet(model: str) -> bool:
     return "parakeet" in model.lower()
 
 
-def _transcribe_parakeet(model_name: str, audio_path: str) -> str:
+def _load_parakeet(model_name: str):
     if model_name not in _parakeet:
         log(f"loading parakeet model {model_name} …")
         from parakeet_mlx import from_pretrained
 
-        _parakeet[model_name] = from_pretrained(model_name)
+        _parakeet[model_name] = from_pretrained(_resolve(model_name))
         log("parakeet model ready")
-    model = _parakeet[model_name]
+    return _parakeet[model_name]
+
+
+def _transcribe_parakeet(model_name: str, audio_path: str) -> str:
+    model = _load_parakeet(model_name)
     result = model.transcribe(audio_path)
     # parakeet-mlx returns an object with `.text` (and per-sentence detail).
     text = getattr(result, "text", None)
     if text is None:
         text = " ".join(s.text for s in getattr(result, "sentences", []))
     return text.strip()
+
+
+def _warm(model_name: str) -> None:
+    """Load a transcription model ahead of the first dictation."""
+    if _is_parakeet(model_name):
+        _load_parakeet(model_name)
+    else:
+        import mlx.core as mx
+        from mlx_whisper.transcribe import ModelHolder
+
+        # Same cache + dtype mlx_whisper.transcribe() uses, so the next take hits it.
+        log(f"loading whisper model {model_name} …")
+        ModelHolder.get_model(_resolve(model_name), mx.float16)
+        log("whisper model ready")
 
 
 def _transcribe_whisper(model_name: str, audio_path: str, language: str) -> str:
@@ -68,7 +108,7 @@ def _transcribe_whisper(model_name: str, audio_path: str, language: str) -> str:
     # condition_on_previous_text=False stops one bad window poisoning later ones.
     result = mlx_whisper.transcribe(
         audio_path,
-        path_or_hf_repo=model_name,
+        path_or_hf_repo=_resolve(model_name),
         language=language or None,
         verbose=False,
         condition_on_previous_text=False,
@@ -85,7 +125,7 @@ def _clean_local(text: str) -> str:
         log(f"loading cleanup model {_CLEANUP_MODEL} …")
         from mlx_lm import load
 
-        _llm[_CLEANUP_MODEL] = load(_CLEANUP_MODEL)
+        _llm[_CLEANUP_MODEL] = load(_resolve(_CLEANUP_MODEL))
         log("cleanup model ready")
     from mlx_lm import generate
 
@@ -105,6 +145,10 @@ def handle(request: dict) -> dict:
             if not text.strip():
                 return {"ok": True, "text": ""}
             return {"ok": True, "text": _clean_local(text)}
+
+        if op == "warm":
+            _warm(request.get("model") or "mlx-community/parakeet-tdt-0.6b-v3")
+            return {"ok": True, "text": ""}
 
         audio_path = request.get("audio_path")
         model = request.get("model") or "mlx-community/parakeet-tdt-0.6b-v3"
